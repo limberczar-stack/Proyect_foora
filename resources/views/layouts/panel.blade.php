@@ -30,7 +30,7 @@
             ['clave' => 'mesas', 'label' => 'Mesas', 'icon' => 'table', 'href' => '#'],
         ]],
         ['grupo' => 'Gestión', 'items' => [
-            ['clave' => 'carta', 'label' => 'Carta', 'icon' => 'book', 'href' => '#'],
+            ['clave' => 'carta', 'label' => 'Carta', 'icon' => 'book', 'href' => route('panel.carta.productos.index')],
             ['clave' => 'promociones', 'label' => 'Promociones', 'icon' => 'tag', 'href' => '#'],
             ['clave' => 'actividad', 'label' => 'Actividad', 'icon' => 'activity', 'href' => '#'],
         ]],
@@ -44,6 +44,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
     <meta name="theme-color" content="#faf8fd">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'Panel') · FOORA</title>
     @fonts
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -293,6 +294,19 @@
         </header>
 
         <main id="contenido" tabindex="-1" class="mx-auto w-full max-w-[90rem] flex-1 px-4 pb-16 pt-5 focus:outline-none sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
+            @if (session('status'))
+                <div class="mb-5 flex items-start gap-2.5 rounded-control bg-success-bg px-4 py-3 text-sm text-success-ink" role="status" data-flash>
+                    <x-icon name="check" class="mt-0.5" />
+                    <p class="flex-1">{{ session('status') }}</p>
+                </div>
+            @endif
+            @if (session('error'))
+                <div class="mb-5 flex items-start gap-2.5 rounded-control bg-danger-bg px-4 py-3 text-sm text-danger-ink" role="alert" data-flash>
+                    <x-icon name="alert" class="mt-0.5" />
+                    <p class="flex-1">{{ session('error') }}</p>
+                </div>
+            @endif
+
             @yield('content')
         </main>
     </div>

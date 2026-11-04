@@ -3,16 +3,19 @@
 namespace Database\Seeders;
 
 use App\Models\Area;
+use App\Models\CategoriaProducto;
 use App\Models\Mesa;
 use App\Models\Plan;
+use App\Models\Producto;
+use App\Models\ProductoVariante;
 use App\Models\Restaurante;
 use App\Models\Rubro;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 
 /**
- * Datos de demostración: dos restaurantes y sus usuarios, para probar login, roles
- * y el aislamiento entre locales. No se llama desde DatabaseSeeder.
+ * Datos de demostración: tres restaurantes con sus usuarios, mesas y carta, para probar
+ * login, roles y el aislamiento entre locales. No se llama desde DatabaseSeeder.
  *
  * Uso: php artisan db:seed --class=DemoSeeder
  * Contraseña de todos los usuarios: password
@@ -52,10 +55,26 @@ class DemoSeeder extends Seeder
             'activo' => true,
         ]);
 
+        $dragonDorado = Restaurante::updateOrCreate(['slug' => 'chifa-dragon-dorado'], [
+            'rubro_id' => Rubro::where('nombre', 'Chifa')->value('id'),
+            'plan_id' => Plan::where('nombre', 'Pro')->value('id'),
+            'nombre' => 'Chifa Dragón Dorado',
+            'telefono' => '962112233',
+            'direccion' => 'Jr. Huallayco 840',
+            'ciudad' => 'Huánuco',
+            'estado_local' => 'abierto',
+            'activo' => true,
+        ]);
+
         $this->usuario('superadmin@foora.test', 'Equipo FOORA', 'superadmin', null);
         $this->usuario('admin@foora.test', 'Rosa Quispe', 'admin', $buenSabor);
         $this->usuario('cajero@foora.test', 'Miguel Torres', 'cajero', $buenSabor);
         $this->usuario('admin@labahia.test', 'Carla Mendoza', 'admin', $laBahia);
+        $this->usuario('admin@chifa.test', 'Andrés Chang', 'admin', $dragonDorado);
+
+        $this->cartaBuenSabor($buenSabor);
+        $this->cartaLaBahia($laBahia);
+        $this->cartaDragonDorado($dragonDorado);
 
         $this->mesas($buenSabor, [
             'Salón principal' => ['M1' => 4, 'M2' => 2, 'M3' => 4, 'M4' => 4, 'M5' => 2, 'M6' => 6, 'M7' => 6, 'M8' => 4, 'M9' => 4, 'M10' => 8],
@@ -66,7 +85,124 @@ class DemoSeeder extends Seeder
             'Salón' => ['B1' => 4, 'B2' => 4, 'B3' => 2, 'B4' => 6],
         ]);
 
-        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, admin@labahia.test (contraseña: password).');
+        $this->mesas($dragonDorado, [
+            'Salón' => ['D1' => 4, 'D2' => 4, 'D3' => 6, 'D4' => 8, 'D5' => 2],
+        ]);
+
+        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, admin@labahia.test, admin@chifa.test (contraseña: password).');
+    }
+
+    /**
+     * Pollería: categorías anidadas (Bebidas › Frías / Calientes, sin fotos) y variantes de presa y tamaño.
+     */
+    private function cartaBuenSabor(Restaurante $restaurante): void
+    {
+        $pollos = $this->categoria($restaurante, 'Pollos a la brasa', 0, descripcion: 'Pollo marinado a la leña con papas y ensalada');
+        $parrillas = $this->categoria($restaurante, 'Parrillas', 1);
+        $acompanamientos = $this->categoria($restaurante, 'Acompañamientos', 2);
+        $bebidas = $this->categoria($restaurante, 'Bebidas', 3, conFotos: false);
+        $frias = $this->categoria($restaurante, 'Frías', 0, padre: $bebidas, conFotos: false);
+        $calientes = $this->categoria($restaurante, 'Calientes', 1, padre: $bebidas, conFotos: false);
+
+        $this->producto($pollos, '1/4 de pollo a la brasa', 'Con papas fritas, ensalada fresca y cremas de la casa.', variantes: ['Pierna' => 17.00, 'Pecho' => 18.50], destacado: true);
+        $this->producto($pollos, '1/2 pollo a la brasa', 'Con papas fritas familiares y ensalada.', precio: 32.00);
+        $this->producto($pollos, 'Pollo entero a la brasa', 'Con papas fritas familiares, ensalada y gaseosa de 1.5 L.', precio: 58.00, destacado: true);
+        $this->producto($parrillas, 'Anticuchos de corazón', 'Dos palitos con papa dorada y choclo.', precio: 18.00, etiquetas: ['picante']);
+        $this->producto($parrillas, 'Parrilla personal', null, precio: 38.00, etiquetas: ['nuevo']);
+        $this->producto($acompanamientos, 'Papas fritas', 'Papa amarilla huanuqueña frita al momento.', variantes: ['Personal' => 8.00, 'Familiar' => 15.00], etiquetas: ['vegetariano']);
+        $this->producto($acompanamientos, 'Ensalada fresca', 'Lechuga, tomate, pepino y zanahoria con vinagreta.', precio: 7.00, etiquetas: ['vegetariano', 'sin_gluten']);
+        $this->producto($frias, 'Chicha morada', 'Preparada en casa con maíz morado.', variantes: ['Vaso' => 4.00, '1/2 litro' => 8.00, 'Jarra 1 L' => 14.00], estacion: 'barra');
+        $this->producto($frias, 'Limonada', 'Limón de la zona, bien helada.', variantes: ['Vaso' => 5.00, '1/2 litro' => 9.00, 'Jarra 1 L' => 16.00], estacion: 'barra');
+        $this->producto($frias, 'Inca Kola 500 ml', null, precio: 4.50, estacion: 'barra');
+        $this->producto($calientes, 'Café pasado', 'Café de Chinchao.', precio: 5.00, estacion: 'barra');
+        $this->producto($calientes, 'Infusión de manzanilla', 'Con miel de abeja.', precio: 3.50, estacion: 'barra', disponible: false);
+    }
+
+    private function cartaLaBahia(Restaurante $restaurante): void
+    {
+        $ceviches = $this->categoria($restaurante, 'Ceviches', 0);
+        $calientes = $this->categoria($restaurante, 'Platos calientes', 1);
+        $bebidas = $this->categoria($restaurante, 'Bebidas', 2, conFotos: false);
+
+        $this->producto($ceviches, 'Ceviche clásico', 'Pescado del día con limón, ají limo, camote y choclo.', precio: 28.00, etiquetas: ['picante', 'sin_gluten']);
+        $this->producto($ceviches, 'Ceviche mixto', 'Pescado, pulpo, langostinos y conchas negras.', precio: 34.00, etiquetas: ['picante']);
+        $this->producto($calientes, 'Chicharrón de pescado', 'Con yuca frita y salsa criolla.', precio: 30.00);
+        $this->producto($calientes, 'Arroz con mariscos', 'Arroz norteño con mariscos y salsa criolla.', precio: 32.00);
+        $this->producto($bebidas, 'Chicha morada', 'Jarra de 1 litro.', precio: 12.00, estacion: 'barra');
+    }
+
+    /**
+     * Chifa: variantes de tamaño (Taza, Personal, Mediano, Familiar).
+     */
+    private function cartaDragonDorado(Restaurante $restaurante): void
+    {
+        $tamanos = fn (float $taza, float $personal, float $mediano, float $familiar): array => [
+            'Taza' => $taza, 'Personal' => $personal, 'Mediano' => $mediano, 'Familiar' => $familiar,
+        ];
+
+        $arroces = $this->categoria($restaurante, 'Arroces', 0);
+        $tallarines = $this->categoria($restaurante, 'Tallarines', 1);
+        $entradas = $this->categoria($restaurante, 'Entradas y sopas', 2);
+        $bebidas = $this->categoria($restaurante, 'Bebidas', 3, conFotos: false);
+
+        $this->producto($arroces, 'Chaufa de pollo', 'Arroz salteado al wok con pollo, huevo y cebollita china.', variantes: $tamanos(11.00, 22.00, 32.00, 44.00), destacado: true);
+        $this->producto($arroces, 'Chaufa especial', 'Con pollo, chancho asado, langostinos y tortilla.', variantes: $tamanos(13.00, 25.00, 36.00, 49.00));
+        $this->producto($arroces, 'Aeropuerto', 'Chaufa con tallarín saltado y tortilla de huevo.', variantes: ['Personal' => 24.00, 'Familiar' => 46.00]);
+        $this->producto($tallarines, 'Tallarín saltado de pollo', 'Fideos salteados con verduras al wok.', variantes: ['Personal' => 22.00, 'Familiar' => 42.00]);
+        $this->producto($entradas, 'Wantán frito', '10 unidades con salsa de tamarindo.', precio: 12.00);
+        $this->producto($entradas, 'Sopa wantán', 'Caldo de pollo con wantanes y verduras.', variantes: ['Personal' => 14.00, 'Familiar' => 26.00]);
+        $this->producto($bebidas, 'Té jazmín', null, variantes: ['Taza' => 3.00, 'Tetera' => 9.00], estacion: 'barra');
+    }
+
+    private function categoria(Restaurante $restaurante, string $nombre, int $orden, ?CategoriaProducto $padre = null, bool $conFotos = true, ?string $descripcion = null): CategoriaProducto
+    {
+        return CategoriaProducto::updateOrCreate(
+            ['restaurante_id' => $restaurante->id, 'parent_id' => $padre?->id, 'nombre' => $nombre],
+            ['orden' => $orden, 'activa' => true, 'con_fotos' => $conFotos, 'descripcion' => $descripcion],
+        );
+    }
+
+    /**
+     * @param  array<string, float>  $variantes  nombre => precio (si hay, el producto es de tipo variantes)
+     * @param  list<string>  $etiquetas
+     */
+    private function producto(
+        CategoriaProducto $categoria,
+        string $nombre,
+        ?string $descripcion,
+        ?float $precio = null,
+        array $variantes = [],
+        array $etiquetas = [],
+        string $estacion = 'cocina',
+        bool $destacado = false,
+        bool $disponible = true,
+    ): Producto {
+        $producto = Producto::withTrashed()->updateOrCreate(
+            ['restaurante_id' => $categoria->restaurante_id, 'nombre' => $nombre],
+            [
+                'categoria_id' => $categoria->id,
+                'tipo' => $variantes === [] ? 'simple' : 'variantes',
+                'descripcion' => $descripcion,
+                'precio' => $variantes === [] ? $precio : min($variantes),
+                'estacion' => $estacion,
+                'etiquetas' => $etiquetas,
+                'destacado' => $destacado,
+                'disponible' => $disponible,
+            ],
+        );
+
+        if ($producto->trashed()) {
+            $producto->restore();
+        }
+
+        // En el seeder sí se recrean: así repetirlo deja siempre los mismos datos.
+        ProductoVariante::where('producto_id', $producto->id)->delete();
+
+        foreach (array_keys($variantes) as $orden => $nombreVariante) {
+            $producto->variantes()->create(['nombre' => $nombreVariante, 'precio' => $variantes[$nombreVariante], 'orden' => $orden]);
+        }
+
+        return $producto;
     }
 
     private function usuario(string $email, string $nombre, string $rol, ?Restaurante $restaurante): User

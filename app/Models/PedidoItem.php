@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PedidoItem extends Model
 {
@@ -12,6 +13,8 @@ class PedidoItem extends Model
     protected $fillable = [
         'pedido_id',
         'producto_id',
+        'variante_id',
+        'variante_nombre',
         'nombre',
         'cantidad',
         'precio_unitario',
@@ -50,5 +53,21 @@ class PedidoItem extends Model
     public function producto(): BelongsTo
     {
         return $this->belongsTo(Producto::class)->withTrashed();
+    }
+
+    /**
+     * @return BelongsTo<ProductoVariante, $this>
+     */
+    public function variante(): BelongsTo
+    {
+        return $this->belongsTo(ProductoVariante::class, 'variante_id');
+    }
+
+    /**
+     * @return HasMany<PedidoItemOpcion, $this>
+     */
+    public function opciones(): HasMany
+    {
+        return $this->hasMany(PedidoItemOpcion::class);
     }
 }
