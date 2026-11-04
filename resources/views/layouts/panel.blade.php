@@ -1,0 +1,286 @@
+@php
+    /**
+     * Layout del panel del restaurante.
+     *
+     * Variables opcionales (la vista hija las define; aquí hay valores de muestra):
+     * - $restaurante: nombre, ciudad, plan, abierto (bool), iniciales
+     * - $usuario: nombre, rol, iniciales
+     * - $navCounts: conteos de colas que requieren acción (pedidos nuevos, alertas, reservas por confirmar)
+     * - $alertasRecientes: lista corta para el menú de la campana
+     * - $navActivo: clave del ítem activo del menú
+     *
+     * @var array{nombre: string, ciudad: string, plan: string, abierto: bool, iniciales: string} $restaurante
+     */
+    $restaurante ??= ['nombre' => 'Mi restaurante', 'ciudad' => 'Huánuco', 'plan' => 'Básico', 'abierto' => false, 'iniciales' => 'MR'];
+    $usuario ??= ['nombre' => 'Usuario', 'rol' => 'Administrador', 'iniciales' => 'U'];
+    $navCounts ??= [];
+    $alertasRecientes ??= [];
+    $navActivo ??= 'inicio';
+
+    /** @var list<array{grupo: string, items: list<array{clave: string, label: string, icon: string, href: string, count?: int, countLabel?: string}>}> $menu */
+    $menu = [
+        ['grupo' => 'Operación', 'items' => [
+            ['clave' => 'inicio', 'label' => 'Inicio', 'icon' => 'home', 'href' => route('panel.inicio')],
+            ['clave' => 'pedidos', 'label' => 'Pedidos', 'icon' => 'receipt', 'href' => '#', 'count' => $navCounts['pedidos'] ?? 0, 'countLabel' => 'pedidos nuevos'],
+            ['clave' => 'alertas', 'label' => 'Alertas', 'icon' => 'bell', 'href' => '#', 'count' => $navCounts['alertas'] ?? 0, 'countLabel' => 'alertas sin resolver'],
+            ['clave' => 'reservas', 'label' => 'Reservas', 'icon' => 'calendar', 'href' => '#', 'count' => $navCounts['reservas'] ?? 0, 'countLabel' => 'reservas por confirmar'],
+            ['clave' => 'mesas', 'label' => 'Mesas', 'icon' => 'table', 'href' => '#'],
+        ]],
+        ['grupo' => 'Gestión', 'items' => [
+            ['clave' => 'carta', 'label' => 'Carta', 'icon' => 'book', 'href' => '#'],
+            ['clave' => 'promociones', 'label' => 'Promociones', 'icon' => 'tag', 'href' => '#'],
+            ['clave' => 'actividad', 'label' => 'Actividad', 'icon' => 'activity', 'href' => '#'],
+        ]],
+    ];
+
+    $alertasPendientes = $navCounts['alertas'] ?? 0;
+@endphp
+<!DOCTYPE html>
+<html lang="es-PE">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#faf8fd">
+    <title>@yield('title', 'Panel') · FOORA</title>
+    @fonts
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+</head>
+<body class="min-h-dvh">
+    <a href="#contenido" class="sr-only z-50 rounded-control bg-brand-700 px-4 py-2 font-medium text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
+        Saltar al contenido
+    </a>
+
+    {{-- Fondo del panel lateral en celular y tablet --}}
+    <div
+        class="sidebar-overlay invisible fixed inset-0 z-30 bg-ink/40 opacity-0 lg:hidden"
+        data-nav-overlay
+        aria-hidden="true"
+    ></div>
+
+    {{-- Barra lateral --}}
+    <aside
+        id="panel-sidebar"
+        class="sidebar invisible fixed inset-y-0 left-0 z-40 flex w-[17rem] max-w-[85vw] -translate-x-full flex-col border-r border-line bg-ground shadow-float lg:visible lg:translate-x-0 lg:shadow-none"
+        data-sidebar
+        aria-label="Navegación del panel"
+    >
+        <div class="flex h-16 shrink-0 items-center justify-between px-5">
+            <a href="{{ route('panel.inicio') }}" class="press rounded-chip text-xl font-bold tracking-tight text-brand-700" aria-label="FOORA, ir al inicio">
+                FOORA
+            </a>
+            <x-button variant="ghost" size="icon" class="-mr-2 lg:hidden" data-nav-close aria-label="Cerrar menú">
+                <x-icon name="x" size="20" />
+            </x-button>
+        </div>
+
+        {{-- Restaurante y estado del local --}}
+        <div class="mx-3 rounded-card border border-line bg-surface p-3">
+            <div class="flex items-center gap-3">
+                <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-800" aria-hidden="true">
+                    {{ $restaurante['iniciales'] }}
+                </span>
+                <div class="min-w-0">
+                    <p class="truncate font-semibold text-ink">{{ $restaurante['nombre'] }}</p>
+                    <p class="truncate text-xs text-muted">{{ $restaurante['ciudad'] }} · Plan {{ $restaurante['plan'] }}</p>
+                </div>
+            </div>
+
+            <button
+                type="button"
+                role="switch"
+                aria-checked="{{ $restaurante['abierto'] ? 'true' : 'false' }}"
+                aria-describedby="estado-local-ayuda"
+                data-estado-toggle
+                class="press group mt-3 flex h-11 w-full items-center justify-between rounded-control bg-raised px-3 text-sm lg:h-10"
+            >
+                <span class="flex items-center gap-2">
+                    <span class="relative flex size-2.5">
+                        <span data-estado-dot @class(['size-2.5 rounded-full transition-colors duration-200', 'bg-success-dot' => $restaurante['abierto'], 'bg-neutral-dot' => ! $restaurante['abierto']])></span>
+                    </span>
+                    <span class="font-medium text-ink" data-estado-label>{{ $restaurante['abierto'] ? 'Abierto' : 'Cerrado' }}</span>
+                </span>
+                {{-- Interruptor: verde semántico, no el color de marca --}}
+                <span
+                    data-estado-track
+                    @class(['relative h-5 w-9 rounded-full transition-colors duration-200', 'bg-success-fill' => $restaurante['abierto'], 'bg-control' => ! $restaurante['abierto']])
+                    aria-hidden="true"
+                >
+                    <span
+                        data-estado-thumb
+                        @class(['absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out', 'translate-x-4' => $restaurante['abierto']])
+                    ></span>
+                </span>
+            </button>
+            <p id="estado-local-ayuda" class="sr-only">Cambia si el local recibe pedidos y reservas desde la app.</p>
+            <p class="sr-only" aria-live="polite" data-estado-live></p>
+        </div>
+
+        {{-- Menú --}}
+        <nav class="mt-2 flex-1 overflow-y-auto px-3 pb-4" aria-label="Principal">
+            @foreach ($menu as $grupo)
+                <p class="px-3 pb-2 pt-5 text-xs text-muted">{{ $grupo['grupo'] }}</p>
+                <ul class="flex flex-col gap-0.5">
+                    @foreach ($grupo['items'] as $item)
+                        @php $esActivo = $item['clave'] === $navActivo; @endphp
+                        <li>
+                            <a
+                                href="{{ $item['href'] }}"
+                                @if ($esActivo) aria-current="page" @endif
+                                @class([
+                                    'press flex h-11 items-center gap-3 rounded-control px-3 text-sm lg:h-9',
+                                    'bg-active font-medium text-brand-900' => $esActivo,
+                                    'text-neutral-ink hover:bg-raised hover:text-ink' => ! $esActivo,
+                                ])
+                            >
+                                <x-icon :name="$item['icon']" @class(['text-brand-700' => $esActivo, 'text-faint' => ! $esActivo]) />
+                                <span class="flex-1">{{ $item['label'] }}</span>
+                                @if (! empty($item['count']))
+                                    <span class="num inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1.5 text-xs font-semibold text-white">
+                                        {{ $item['count'] }}<span class="sr-only"> {{ $item['countLabel'] }}</span>
+                                    </span>
+                                @endif
+                            </a>
+                        </li>
+                    @endforeach
+                </ul>
+            @endforeach
+        </nav>
+
+        <div class="border-t border-line px-3 py-3">
+            <a href="#" class="press flex h-11 items-center gap-3 rounded-control px-3 text-sm text-neutral-ink hover:bg-raised hover:text-ink lg:h-9">
+                <x-icon name="settings" class="text-faint" />
+                Configuración
+            </a>
+            <a href="#" class="press flex h-11 items-center gap-3 rounded-control px-3 text-sm text-neutral-ink hover:bg-raised hover:text-ink lg:h-9">
+                <x-icon name="help" class="text-faint" />
+                Ayuda
+            </a>
+        </div>
+    </aside>
+
+    <div class="flex min-h-dvh flex-col lg:pl-[17rem]">
+        {{-- Barra superior --}}
+        <header class="sticky top-0 z-20 border-b border-line bg-ground">
+            <div class="mx-auto flex h-14 max-w-[90rem] items-center gap-2 px-4 sm:px-6 lg:h-16 lg:px-8">
+                <x-button
+                    variant="ghost"
+                    size="icon"
+                    class="-ml-2 lg:hidden"
+                    data-nav-toggle
+                    aria-controls="panel-sidebar"
+                    aria-expanded="false"
+                    aria-label="Abrir menú"
+                >
+                    <x-icon name="menu" size="20" />
+                </x-button>
+
+                <div class="min-w-0 flex-1">
+                    <p class="truncate text-sm font-semibold text-ink lg:hidden">@yield('title', 'Panel')</p>
+                    <p class="hidden truncate text-sm text-muted lg:block">
+                        {{ $restaurante['nombre'] }}
+                        <x-icon name="chevron-right" size="12" class="mx-1 inline text-faint" />
+                        <span class="text-ink">@yield('title', 'Panel')</span>
+                    </p>
+                </div>
+
+                {{-- Campana de alertas --}}
+                <div class="relative" data-dropdown>
+                    <x-button
+                        variant="ghost"
+                        size="icon"
+                        class="relative"
+                        data-dropdown-trigger
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        aria-controls="menu-alertas"
+                        aria-label="Alertas: {{ $alertasPendientes }} sin resolver"
+                    >
+                        <x-icon name="bell" size="20" />
+                        @if ($alertasPendientes > 0)
+                            <span class="num absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger-dot px-1 text-[0.6875rem] font-semibold leading-none text-white ring-2 ring-ground" aria-hidden="true">
+                                {{ $alertasPendientes }}
+                            </span>
+                        @endif
+                    </x-button>
+
+                    <div
+                        id="menu-alertas"
+                        class="dropdown-menu absolute right-0 top-full z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-card border border-line bg-surface shadow-float"
+                        data-dropdown-menu
+                        hidden
+                    >
+                        <div class="flex items-center justify-between border-b border-rule px-4 py-3">
+                            <p class="font-semibold">Alertas</p>
+                            <span class="num text-xs text-muted">{{ $alertasPendientes }} sin resolver</span>
+                        </div>
+                        @forelse ($alertasRecientes as $alerta)
+                            <a href="#" class="flex items-start gap-3 border-b border-rule px-4 py-3 last:border-0 hover:bg-raised">
+                                <x-badge :status="$alerta['prioridad']" class="mt-0.5" />
+                                <span class="min-w-0 flex-1">
+                                    <span class="block truncate text-sm font-medium text-ink">{{ $alerta['titulo'] }}</span>
+                                    <span class="block text-xs text-muted">{{ $alerta['hace'] }}</span>
+                                </span>
+                            </a>
+                        @empty
+                            <p class="px-4 py-6 text-center text-sm text-muted">No hay alertas pendientes.</p>
+                        @endforelse
+                        <div class="border-t border-rule p-2">
+                            <a href="#" class="press flex h-10 items-center justify-center rounded-control text-sm font-medium text-brand-700 hover:bg-brand-50">Ver todas las alertas</a>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- Usuario --}}
+                <div class="relative" data-dropdown>
+                    <button
+                        type="button"
+                        class="press flex h-11 items-center gap-2 rounded-control pl-1 pr-1 hover:bg-raised sm:pr-2 lg:h-10"
+                        data-dropdown-trigger
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        aria-controls="menu-usuario"
+                    >
+                        <span class="flex size-8 items-center justify-center rounded-full bg-[#e0f2fe] text-xs font-semibold text-[#0c4a6e]" aria-hidden="true">
+                            {{ $usuario['iniciales'] }}
+                        </span>
+                        <span class="hidden text-left sm:block">
+                            <span class="block text-sm font-medium leading-tight text-ink">{{ $usuario['nombre'] }}</span>
+                            <span class="block text-xs leading-tight text-muted">{{ $usuario['rol'] }}</span>
+                        </span>
+                        <span class="sr-only sm:hidden">Menú de {{ $usuario['nombre'] }}</span>
+                        <x-icon name="chevron-down" size="14" class="hidden text-faint sm:block" />
+                    </button>
+
+                    <div
+                        id="menu-usuario"
+                        class="dropdown-menu absolute right-0 top-full z-30 mt-2 w-56 rounded-card border border-line bg-surface p-1.5 shadow-float"
+                        data-dropdown-menu
+                        hidden
+                    >
+                        <div class="px-3 py-2 sm:hidden">
+                            <p class="text-sm font-medium">{{ $usuario['nombre'] }}</p>
+                            <p class="text-xs text-muted">{{ $usuario['rol'] }}</p>
+                        </div>
+                        <a href="#" class="flex h-10 items-center gap-2.5 rounded-control px-3 text-sm hover:bg-raised">
+                            <x-icon name="user" class="text-faint" /> Mi perfil
+                        </a>
+                        <a href="#" class="flex h-10 items-center gap-2.5 rounded-control px-3 text-sm hover:bg-raised">
+                            <x-icon name="settings" class="text-faint" /> Configuración
+                        </a>
+                        <div class="my-1 border-t border-rule"></div>
+                        <button type="button" class="flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-sm text-danger-ink hover:bg-danger-bg/60">
+                            <x-icon name="logout" /> Cerrar sesión
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <main id="contenido" tabindex="-1" class="mx-auto w-full max-w-[90rem] flex-1 px-4 pb-16 pt-5 focus:outline-none sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
+            @yield('content')
+        </main>
+    </div>
+
+    @stack('modals')
+</body>
+</html>
