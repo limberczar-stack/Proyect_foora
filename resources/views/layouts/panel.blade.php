@@ -2,17 +2,20 @@
     /**
      * Layout del panel del restaurante.
      *
-     * Variables opcionales (la vista hija las define; aquí hay valores de muestra):
-     * - $restaurante: nombre, ciudad, plan, abierto (bool), iniciales
-     * - $usuario: nombre, rol, iniciales
+     * Datos reales (view composer en AppServiceProvider):
+     * - $panelUsuario: nombre, rol, iniciales
+     * - $panelRestaurante: nombre, ciudad, plan, abierto, iniciales, logo (null para el superadmin)
+     *
+     * Variables opcionales que define la vista hija:
      * - $navCounts: conteos de colas que requieren acción (pedidos nuevos, alertas, reservas por confirmar)
      * - $alertasRecientes: lista corta para el menú de la campana
      * - $navActivo: clave del ítem activo del menú
      *
-     * @var array{nombre: string, ciudad: string, plan: string, abierto: bool, iniciales: string} $restaurante
+     * @var array{nombre: string, rol: string, iniciales: string}|null $panelUsuario
+     * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string}|null $panelRestaurante
      */
-    $restaurante ??= ['nombre' => 'Mi restaurante', 'ciudad' => 'Huánuco', 'plan' => 'Básico', 'abierto' => false, 'iniciales' => 'MR'];
-    $usuario ??= ['nombre' => 'Usuario', 'rol' => 'Administrador', 'iniciales' => 'U'];
+    $panelUsuario ??= ['nombre' => 'Invitado', 'rol' => '', 'iniciales' => '?'];
+    $panelRestaurante ??= null;
     $navCounts ??= [];
     $alertasRecientes ??= [];
     $navActivo ??= 'inicio';
@@ -75,44 +78,54 @@
 
         {{-- Restaurante y estado del local --}}
         <div class="mx-3 rounded-card border border-line bg-surface p-3">
-            <div class="flex items-center gap-3">
-                <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-800" aria-hidden="true">
-                    {{ $restaurante['iniciales'] }}
-                </span>
-                <div class="min-w-0">
-                    <p class="truncate font-semibold text-ink">{{ $restaurante['nombre'] }}</p>
-                    <p class="truncate text-xs text-muted">{{ $restaurante['ciudad'] }} · Plan {{ $restaurante['plan'] }}</p>
+            @if ($panelRestaurante)
+                <div class="flex items-center gap-3">
+                    @if ($panelRestaurante['logo'])
+                        <img src="{{ $panelRestaurante['logo'] }}" alt="" class="size-10 shrink-0 rounded-full object-cover">
+                    @else
+                        <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-100 text-sm font-semibold text-brand-800" aria-hidden="true">
+                            {{ $panelRestaurante['iniciales'] }}
+                        </span>
+                    @endif
+                    <div class="min-w-0">
+                        <p class="truncate font-semibold text-ink">{{ $panelRestaurante['nombre'] }}</p>
+                        <p class="truncate text-xs text-muted">
+                            {{ $panelRestaurante['ciudad'] }}@if ($panelRestaurante['plan']) · Plan {{ $panelRestaurante['plan'] }}@endif
+                        </p>
+                    </div>
                 </div>
-            </div>
 
-            <button
-                type="button"
-                role="switch"
-                aria-checked="{{ $restaurante['abierto'] ? 'true' : 'false' }}"
-                aria-describedby="estado-local-ayuda"
-                data-estado-toggle
-                class="press group mt-3 flex h-11 w-full items-center justify-between rounded-control bg-raised px-3 text-sm lg:h-10"
-            >
-                <span class="flex items-center gap-2">
-                    <span class="relative flex size-2.5">
-                        <span data-estado-dot @class(['size-2.5 rounded-full transition-colors duration-200', 'bg-success-dot' => $restaurante['abierto'], 'bg-neutral-dot' => ! $restaurante['abierto']])></span>
-                    </span>
-                    <span class="font-medium text-ink" data-estado-label>{{ $restaurante['abierto'] ? 'Abierto' : 'Cerrado' }}</span>
-                </span>
-                {{-- Interruptor: verde semántico, no el color de marca --}}
-                <span
-                    data-estado-track
-                    @class(['relative h-5 w-9 rounded-full transition-colors duration-200', 'bg-success-fill' => $restaurante['abierto'], 'bg-control' => ! $restaurante['abierto']])
-                    aria-hidden="true"
+                {{-- Estado del local: refleja el dato real; se cambiará desde Configuración --}}
+                <button
+                    type="button"
+                    role="switch"
+                    aria-checked="{{ $panelRestaurante['abierto'] ? 'true' : 'false' }}"
+                    aria-describedby="estado-local-ayuda"
+                    disabled
+                    class="mt-3 flex h-11 w-full cursor-not-allowed items-center justify-between rounded-control bg-raised px-3 text-sm lg:h-10"
                 >
+                    <span class="flex items-center gap-2">
+                        <span @class(['size-2.5 rounded-full', 'bg-success-dot' => $panelRestaurante['abierto'], 'bg-neutral-dot' => ! $panelRestaurante['abierto']]) aria-hidden="true"></span>
+                        <span class="font-medium text-ink">{{ $panelRestaurante['abierto'] ? 'Abierto' : 'Cerrado' }}</span>
+                    </span>
+                    {{-- Interruptor: verde semántico, atenuado mientras esté deshabilitado --}}
                     <span
-                        data-estado-thumb
-                        @class(['absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-sm transition-transform duration-200 ease-out', 'translate-x-4' => $restaurante['abierto']])
-                    ></span>
-                </span>
-            </button>
-            <p id="estado-local-ayuda" class="sr-only">Cambia si el local recibe pedidos y reservas desde la app.</p>
-            <p class="sr-only" aria-live="polite" data-estado-live></p>
+                        @class(['relative h-5 w-9 rounded-full opacity-60', 'bg-success-fill' => $panelRestaurante['abierto'], 'bg-control' => ! $panelRestaurante['abierto']])
+                        aria-hidden="true"
+                    >
+                        <span @class(['absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-sm', 'translate-x-4' => $panelRestaurante['abierto']])></span>
+                    </span>
+                </button>
+                <p id="estado-local-ayuda" class="mt-1.5 px-1 text-xs text-muted">Cambiar el estado: disponible en Configuración.</p>
+            @else
+                <div class="flex items-center gap-3">
+                    <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-700 text-sm font-bold text-white" aria-hidden="true">F</span>
+                    <div class="min-w-0">
+                        <p class="truncate font-semibold text-ink">FOORA</p>
+                        <p class="truncate text-xs text-muted">Superadmin · todos los locales</p>
+                    </div>
+                </div>
+            @endif
         </div>
 
         {{-- Menú --}}
@@ -177,7 +190,7 @@
                 <div class="min-w-0 flex-1">
                     <p class="truncate text-sm font-semibold text-ink lg:hidden">@yield('title', 'Panel')</p>
                     <p class="hidden truncate text-sm text-muted lg:block">
-                        {{ $restaurante['nombre'] }}
+                        {{ $panelRestaurante['nombre'] ?? 'FOORA' }}
                         <x-icon name="chevron-right" size="12" class="mx-1 inline text-faint" />
                         <span class="text-ink">@yield('title', 'Panel')</span>
                     </p>
@@ -241,13 +254,13 @@
                         aria-controls="menu-usuario"
                     >
                         <span class="flex size-8 items-center justify-center rounded-full bg-[#e0f2fe] text-xs font-semibold text-[#0c4a6e]" aria-hidden="true">
-                            {{ $usuario['iniciales'] }}
+                            {{ $panelUsuario['iniciales'] }}
                         </span>
                         <span class="hidden text-left sm:block">
-                            <span class="block text-sm font-medium leading-tight text-ink">{{ $usuario['nombre'] }}</span>
-                            <span class="block text-xs leading-tight text-muted">{{ $usuario['rol'] }}</span>
+                            <span class="block text-sm font-medium leading-tight text-ink">{{ $panelUsuario['nombre'] }}</span>
+                            <span class="block text-xs leading-tight text-muted">{{ $panelUsuario['rol'] }}</span>
                         </span>
-                        <span class="sr-only sm:hidden">Menú de {{ $usuario['nombre'] }}</span>
+                        <span class="sr-only sm:hidden">Menú de {{ $panelUsuario['nombre'] }}</span>
                         <x-icon name="chevron-down" size="14" class="hidden text-faint sm:block" />
                     </button>
 
@@ -258,8 +271,8 @@
                         hidden
                     >
                         <div class="px-3 py-2 sm:hidden">
-                            <p class="text-sm font-medium">{{ $usuario['nombre'] }}</p>
-                            <p class="text-xs text-muted">{{ $usuario['rol'] }}</p>
+                            <p class="text-sm font-medium">{{ $panelUsuario['nombre'] }}</p>
+                            <p class="text-xs text-muted">{{ $panelUsuario['rol'] }}</p>
                         </div>
                         <a href="#" class="flex h-10 items-center gap-2.5 rounded-control px-3 text-sm hover:bg-raised">
                             <x-icon name="user" class="text-faint" /> Mi perfil
@@ -268,9 +281,12 @@
                             <x-icon name="settings" class="text-faint" /> Configuración
                         </a>
                         <div class="my-1 border-t border-rule"></div>
-                        <button type="button" class="flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-sm text-danger-ink hover:bg-danger-bg/60">
-                            <x-icon name="logout" /> Cerrar sesión
-                        </button>
+                        <form method="POST" action="{{ route('logout') }}">
+                            @csrf
+                            <button type="submit" class="flex h-10 w-full items-center gap-2.5 rounded-control px-3 text-sm text-danger-ink hover:bg-danger-bg/60">
+                                <x-icon name="logout" /> Cerrar sesión
+                            </button>
+                        </form>
                     </div>
                 </div>
             </div>

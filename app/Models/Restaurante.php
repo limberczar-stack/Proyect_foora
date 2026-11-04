@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use Database\Factories\RestauranteFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -10,7 +12,8 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Restaurante extends Model
 {
-    use SoftDeletes;
+    /** @use HasFactory<RestauranteFactory> */
+    use HasFactory, SoftDeletes;
 
     protected $table = 'restaurantes';
 
@@ -73,6 +76,36 @@ class Restaurante extends Model
             'total_resenas' => 'integer',
             'activo' => 'boolean',
         ];
+    }
+
+    public function estaAbierto(): bool
+    {
+        return $this->estado_local === 'abierto';
+    }
+
+    public function iniciales(): string
+    {
+        $palabras = collect(explode(' ', $this->nombre))
+            ->reject(fn (string $palabra): bool => mb_strlen($palabra) <= 2 || in_array(mb_strtolower($palabra), ['pollería', 'cevichería', 'cafetería', 'chifa'], true))
+            ->values();
+
+        $base = $palabras->isNotEmpty() ? $palabras : collect([$this->nombre]);
+
+        return $base->take(2)
+            ->map(fn (string $palabra): string => mb_strtoupper(mb_substr($palabra, 0, 1)))
+            ->implode('');
+    }
+
+    /**
+     * URL pública del logo, o null si no tiene.
+     */
+    public function logoUrl(): ?string
+    {
+        if (! $this->logo) {
+            return null;
+        }
+
+        return str_starts_with($this->logo, 'http') ? $this->logo : asset('storage/'.$this->logo);
     }
 
     /**

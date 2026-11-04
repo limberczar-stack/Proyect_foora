@@ -13,12 +13,35 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Str;
 
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasFactory, Notifiable, SoftDeletes;
+
+    /**
+     * Roles del personal de un restaurante (entran al panel con restaurante asignado).
+     *
+     * @var list<string>
+     */
+    public const ROLES_PERSONAL = ['admin', 'cajero', 'mesero', 'cocina', 'repartidor'];
+
+    /**
+     * Nombre visible de cada rol.
+     *
+     * @var array<string, string>
+     */
+    public const ROL_ETIQUETAS = [
+        'superadmin' => 'Superadmin FOORA',
+        'admin' => 'Administrador',
+        'cajero' => 'Cajero',
+        'mesero' => 'Mesero',
+        'cocina' => 'Cocina',
+        'repartidor' => 'Repartidor',
+        'cliente' => 'Cliente',
+    ];
 
     protected $fillable = [
         'restaurante_id',
@@ -44,6 +67,46 @@ class User extends Authenticatable
             'activo' => 'boolean',
             'ultimo_acceso_at' => 'datetime',
         ];
+    }
+
+    public function esSuperadmin(): bool
+    {
+        return $this->rol === 'superadmin';
+    }
+
+    public function esPersonal(): bool
+    {
+        return in_array($this->rol, self::ROLES_PERSONAL, true);
+    }
+
+    /**
+     * Personal activo con restaurante activo, o superadmin activo.
+     */
+    public function puedeEntrarAlPanel(): bool
+    {
+        if (! $this->activo) {
+            return false;
+        }
+
+        if ($this->esSuperadmin()) {
+            return true;
+        }
+
+        return $this->esPersonal()
+            && $this->restaurante_id !== null
+            && $this->restaurante?->activo === true;
+    }
+
+    public function rolEtiqueta(): string
+    {
+        return self::ROL_ETIQUETAS[$this->rol] ?? ucfirst((string) $this->rol);
+    }
+
+    public function iniciales(): string
+    {
+        return Str::of($this->name)->explode(' ')->filter()->take(2)
+            ->map(fn (string $parte): string => Str::upper(Str::substr($parte, 0, 1)))
+            ->implode('');
     }
 
     /**

@@ -9,8 +9,6 @@
      */
     $soles = fn (float $monto): string => "S/\u{00A0}".number_format($monto, 2);
 
-    $restaurante = ['nombre' => 'Pollería El Buen Sabor', 'ciudad' => 'Huánuco', 'plan' => 'Pro', 'abierto' => true, 'iniciales' => 'BS'];
-    $usuario = ['nombre' => 'Rosa Quispe', 'rol' => 'Administradora', 'iniciales' => 'RQ'];
     $fechaHoy = 'Miércoles 4 de noviembre';
     $horaActual = '19:42';
 

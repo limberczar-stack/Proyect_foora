@@ -3,13 +3,16 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToRestaurante;
+use Database\Factories\MesaFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Mesa extends Model
 {
-    use BelongsToRestaurante;
+    /** @use HasFactory<MesaFactory> */
+    use BelongsToRestaurante, HasFactory;
 
     protected $table = 'mesas';
 

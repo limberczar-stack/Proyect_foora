@@ -5,7 +5,7 @@
  * - Menús desplegables (campana, usuario): clic fuera y Esc cierran.
  * - Pestañas: patrón WAI-ARIA con flechas, Inicio y Fin.
  * - Modales sobre <dialog>: abrir, cerrar, clic en el fondo, foco de vuelta al disparador.
- * - Interruptor abierto/cerrado del local (solo visual por ahora).
+ * - Formularios con estado de carga al enviar (login).
  */
 import $ from 'jquery';
 
@@ -257,18 +257,24 @@ function initInactiveControls() {
     });
 }
 
-function initEstadoLocal() {
-    $('[data-estado-toggle]').on('click', function () {
-        const abierto = $(this).attr('aria-checked') !== 'true';
+/**
+ * Formularios con data-loading-form: al enviar, el botón [data-submit] pasa a "cargando"
+ * (spinner visible, texto alternativo, no se puede enviar dos veces).
+ */
+function initLoadingForms() {
+    $(document).on('submit', 'form[data-loading-form]', function () {
+        const $button = $(this).find('[data-submit]');
 
-        $(this).attr('aria-checked', String(abierto));
-        $('[data-estado-label]').text(abierto ? 'Abierto' : 'Cerrado');
-        $('[data-estado-dot]').toggleClass('bg-success-dot', abierto).toggleClass('bg-neutral-dot', !abierto);
-        $('[data-estado-track]').toggleClass('bg-success-fill', abierto).toggleClass('bg-control', !abierto);
-        $('[data-estado-thumb]').toggleClass('translate-x-4', abierto);
-        $('[data-estado-live]').text(
-            abierto ? 'Local abierto: recibe pedidos y reservas.' : 'Local cerrado: no recibe pedidos ni reservas.',
-        );
+        if ($button.attr('aria-busy') === 'true') {
+            return false;
+        }
+
+        $button.attr({ 'aria-busy': 'true', 'aria-disabled': 'true' }).addClass('cursor-progress');
+        $button.find('[data-submit-spinner]').removeAttr('hidden');
+        $button.find('[data-submit-icon]').attr('hidden', true);
+        $button.find('[data-submit-label]').text($button.data('loading-text') || 'Cargando…');
+
+        return true;
     });
 }
 
@@ -278,5 +284,5 @@ $(() => {
     initDropdowns();
     initTabs();
     initModals();
-    initEstadoLocal();
+    initLoadingForms();
 });
