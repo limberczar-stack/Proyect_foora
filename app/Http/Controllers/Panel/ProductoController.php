@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Panel;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Carta\ProductoRequest;
 use App\Models\CategoriaProducto;
+use App\Models\GrupoOpcion;
 use App\Models\Producto;
 use App\Models\ProductoVariante;
 use Illuminate\Http\JsonResponse;
@@ -27,8 +28,7 @@ class ProductoController extends Controller
         $soloIncompletos = $request->boolean('incompletos');
 
         $productos = Producto::query()
-            ->with(['categoria.parent'])
-            ->withCount('variantes')
+            ->with(['categoria.parent', 'variantes'])
             ->when($categoriaId, function ($query) use ($categoriaId): void {
                 $ids = CategoriaProducto::whereKey($categoriaId)->orWhere('parent_id', $categoriaId)->pluck('id');
                 $query->whereIn('categoria_id', $ids);
@@ -55,10 +55,9 @@ class ProductoController extends Controller
     {
         Gate::authorize('create', Producto::class);
 
-        return view('panel.carta.productos.form', [
-            'producto' => new Producto(['tipo' => 'simple', 'estacion' => 'cocina', 'disponible' => true]),
-            'categorias' => CategoriaProducto::raiz()->ordenadas()->with('hijas')->get(),
-        ]);
+        return view('panel.carta.productos.form', $this->datosFormulario(
+            new Producto(['tipo' => 'simple', 'estacion' => 'cocina', 'disponible' => true]),
+        ));
     }
 
     public function store(ProductoRequest $request): RedirectResponse
@@ -74,12 +73,9 @@ class ProductoController extends Controller
     {
         Gate::authorize('update', $producto);
 
-        $producto->load('variantes');
+        $producto->load(['variantes', 'gruposOpcion']);
 
-        return view('panel.carta.productos.form', [
-            'producto' => $producto,
-            'categorias' => CategoriaProducto::raiz()->ordenadas()->with('hijas')->get(),
-        ]);
+        return view('panel.carta.productos.form', $this->datosFormulario($producto));
     }
 
     public function update(ProductoRequest $request, Producto $producto): RedirectResponse
@@ -122,7 +118,38 @@ class ProductoController extends Controller
     }
 
     /**
-     * Guarda el producto, su imagen y sus variantes en una transacción.
+     * Interruptor de disponibilidad de una variante (AJAX). La ruta asegura que sea de este producto.
+     */
+    public function disponibilidadVariante(Request $request, Producto $producto, ProductoVariante $variante): JsonResponse
+    {
+        Gate::authorize('cambiarDisponibilidad', $producto);
+
+        $datos = $request->validate(['disponible' => ['required', 'boolean']]);
+
+        $variante->update(['disponible' => (bool) $datos['disponible']]);
+
+        return response()->json([
+            'disponible' => $variante->disponible,
+            'mensaje' => $variante->disponible
+                ? "«{$variante->nombre}» está disponible."
+                : "«{$variante->nombre}» quedó como agotada.",
+        ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function datosFormulario(Producto $producto): array
+    {
+        return [
+            'producto' => $producto,
+            'categorias' => CategoriaProducto::raiz()->ordenadas()->with('hijas')->get(),
+            'gruposDisponibles' => GrupoOpcion::withCount('opciones')->orderBy('nombre')->get(),
+        ];
+    }
+
+    /**
+     * Guarda el producto, su imagen, sus variantes y sus grupos en una transacción.
      */
     private function guardar(Producto $producto, ProductoRequest $request): Producto
     {
@@ -136,6 +163,7 @@ class ProductoController extends Controller
                 $producto->fill([
                     'categoria_id' => $datos['categoria_id'],
                     'tipo' => $datos['tipo'],
+                    'personas' => $datos['personas'] ?? null,
                     'nombre' => $datos['nombre'],
                     'descripcion' => $datos['descripcion'] ?? null,
                     'precio' => $variantes === [] ? $datos['precio'] : min(array_column($variantes, 'precio')),
@@ -155,6 +183,9 @@ class ProductoController extends Controller
 
                 $this->sincronizarVariantes($producto, $variantes);
                 $producto->recalcularPrecio();
+                $producto->gruposOpcion()->sync(
+                    collect($datos['grupos'])->values()->mapWithKeys(fn (int|string $grupoId, int $orden): array => [$grupoId => ['orden' => $orden]]),
+                );
             });
         } catch (Throwable $e) {
             if ($imagenNueva) {

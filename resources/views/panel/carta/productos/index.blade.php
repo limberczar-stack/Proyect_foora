@@ -168,13 +168,33 @@
                                                 {{ collect([$faltaFoto ? 'Falta foto' : null, $faltaDescripcion ? 'Falta descripción' : null])->filter()->implode(' · ') }}
                                             </p>
                                         @endif
+                                        @if ($producto->tieneVariantes() && auth()->user()->can('cambiarDisponibilidad', $producto))
+                                            <details class="mt-1">
+                                                <summary class="cursor-pointer py-2 text-[0.8125rem] font-medium text-brand-700 lg:py-1">Disponibilidad por variante</summary>
+                                                <ul class="mt-1 flex flex-col gap-1" aria-label="Variantes de {{ $producto->nombre }}">
+                                                    @foreach ($producto->variantes as $variante)
+                                                        <li class="flex items-center justify-between gap-3">
+                                                            <span class="min-w-0 text-sm text-ink">{{ $variante->nombre }}</span>
+                                                            @include('panel.carta._switch', [
+                                                                'disponible' => $variante->disponible,
+                                                                'url' => route('panel.carta.productos.variantes.disponibilidad', [$producto, $variante]),
+                                                                'etiqueta' => $producto->nombre.', '.$variante->nombre,
+                                                            ])
+                                                        </li>
+                                                    @endforeach
+                                                </ul>
+                                            </details>
+                                        @endif
                                     </div>
                                 </div>
                             </td>
                             <td data-cell="meta" data-label="Precio" class="num whitespace-nowrap text-right text-ink">
                                 @if ($producto->tieneVariantes())
                                     <span class="text-muted">desde</span> {{ $soles($producto->precio) }}
-                                    <span class="block text-xs text-muted">{{ $producto->variantes_count }} variantes</span>
+                                    <span class="block text-xs text-muted">{{ $producto->variantes->count() }} variantes</span>
+                                @elseif ($producto->esCombo())
+                                    {{ $soles($producto->precio) }}
+                                    <span class="block text-xs text-muted">Combo · Para {{ $producto->personas }} {{ $producto->personas === 1 ? 'persona' : 'personas' }}</span>
                                 @else
                                     {{ $soles($producto->precio) }}
                                 @endif
@@ -182,23 +202,11 @@
                             <td data-cell="hide-sm" class="text-muted">{{ $producto->estacion === 'barra' ? 'Barra' : 'Cocina' }}</td>
                             <td data-cell="end">
                                 @can('cambiarDisponibilidad', $producto)
-                                    <button
-                                        type="button"
-                                        role="switch"
-                                        aria-checked="{{ $producto->disponible ? 'true' : 'false' }}"
-                                        aria-label="Disponible: {{ $producto->nombre }}"
-                                        data-disponibilidad
-                                        data-url="{{ route('panel.carta.productos.disponibilidad', $producto) }}"
-                                        class="group inline-flex min-h-11 items-center gap-2.5 rounded-control px-1 lg:min-h-9"
-                                    >
-                                        <span class="relative inline-flex">
-                                            <span data-switch-track @class(['h-6 w-11 rounded-full transition-colors duration-200', 'bg-success-fill' => $producto->disponible, 'bg-control' => ! $producto->disponible])></span>
-                                            <span data-switch-thumb @class(['absolute left-0.5 top-0.5 flex size-5 items-center justify-center rounded-full bg-white shadow-sm transition-transform duration-200 ease-out', 'translate-x-5' => $producto->disponible])>
-                                                <x-spinner :size="12" label="Guardando" class="hidden text-brand-700" data-switch-spinner />
-                                            </span>
-                                        </span>
-                                        <span data-switch-label class="w-16 text-left text-[0.8125rem] text-muted">{{ $producto->disponible ? 'Disponible' : 'Agotado' }}</span>
-                                    </button>
+                                    @include('panel.carta._switch', [
+                                        'disponible' => $producto->disponible,
+                                        'url' => route('panel.carta.productos.disponibilidad', $producto),
+                                        'etiqueta' => $producto->nombre,
+                                    ])
                                 @else
                                     <x-badge :tone="$producto->disponible ? 'success' : 'neutral'">{{ $producto->disponible ? 'Disponible' : 'Agotado' }}</x-badge>
                                 @endcan

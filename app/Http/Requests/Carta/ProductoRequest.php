@@ -7,7 +7,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 /**
- * Crear o editar un producto de la carta (etapa 1: precio único o variantes).
+ * Crear o editar un producto de la carta: precio único, variantes o combo, y sus grupos de opciones.
  */
 class ProductoRequest extends FormRequest
 {
@@ -40,6 +40,7 @@ class ProductoRequest extends FormRequest
             'quitar_imagen' => $this->boolean('quitar_imagen'),
             'etiquetas' => array_values((array) $this->input('etiquetas', [])),
             'variantes' => $variantes,
+            'grupos' => array_values(array_filter((array) $this->input('grupos', []), 'filled')),
         ]);
     }
 
@@ -58,8 +59,9 @@ class ProductoRequest extends FormRequest
                 Rule::exists('categorias_producto', 'id')->where('restaurante_id', $this->user()->restaurante_id),
             ],
             'tipo' => ['required', Rule::in(array_keys(Producto::TIPOS_EDITABLES))],
-            'descripcion' => ['nullable', 'string', 'max:1000'],
-            'precio' => ['exclude_unless:tipo,simple', 'required', ...$precio],
+            'descripcion' => ['nullable', 'required_if:tipo,combo', 'string', 'max:1000'],
+            'precio' => ['exclude_if:tipo,variantes', 'required', ...$precio],
+            'personas' => ['exclude_unless:tipo,combo', 'required', 'integer', 'min:1', 'max:'.Producto::PERSONAS_MAXIMO],
             'imagen' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
             'quitar_imagen' => ['boolean'],
             'estacion' => ['required', Rule::in(['cocina', 'barra'])],
@@ -72,6 +74,12 @@ class ProductoRequest extends FormRequest
             'variantes.*.nombre' => ['required', 'string', 'max:60', 'distinct:ignore_case'],
             'variantes.*.precio' => ['required', ...$precio],
             'variantes.*.disponible' => ['boolean'],
+            'grupos' => ['array'],
+            'grupos.*' => [
+                'integer',
+                'distinct',
+                Rule::exists('grupos_opcion', 'id')->where('restaurante_id', $this->user()->restaurante_id),
+            ],
         ];
     }
 
@@ -87,12 +95,17 @@ class ProductoRequest extends FormRequest
             'nombre.max' => 'El nombre admite hasta 120 caracteres.',
             'categoria_id.required' => 'Elige una categoría.',
             'categoria_id.exists' => 'Elige una categoría de tu carta.',
-            'tipo.in' => 'Elige si tiene precio único o variantes.',
+            'tipo.in' => 'Elige si tiene precio único, variantes o es un combo.',
+            'descripcion.required_if' => 'Escribe lo que incluye el combo.',
             'descripcion.max' => 'La descripción admite hasta 1000 caracteres.',
             'precio.required' => 'Escribe el precio.',
             'precio.decimal' => 'El precio admite hasta 2 decimales, por ejemplo 18.50.',
             'precio.gt' => 'El precio debe ser mayor a S/ 0.00.',
             'precio.max' => "El precio máximo es S/ {$maximo}.",
+            'personas.required' => 'Indica para cuántas personas es el combo.',
+            'personas.integer' => 'Las personas deben ser un número entero.',
+            'personas.min' => 'El combo debe ser al menos para 1 persona.',
+            'personas.max' => 'El combo admite hasta '.Producto::PERSONAS_MAXIMO.' personas.',
             'imagen.file' => 'No se pudo subir la imagen.',
             'imagen.mimes' => 'La imagen debe ser JPG, PNG o WEBP.',
             'imagen.max' => 'La imagen pesa más de 2 MB.',
@@ -108,6 +121,9 @@ class ProductoRequest extends FormRequest
             'variantes.*.precio.decimal' => 'El precio admite hasta 2 decimales.',
             'variantes.*.precio.gt' => 'El precio debe ser mayor a S/ 0.00.',
             'variantes.*.precio.max' => "El precio máximo es S/ {$maximo}.",
+            'grupos.*.integer' => 'Elige grupos de tu carta.',
+            'grupos.*.distinct' => 'Un grupo no se puede asignar dos veces.',
+            'grupos.*.exists' => 'Elige grupos de tu carta.',
         ];
     }
 

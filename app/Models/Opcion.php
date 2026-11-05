@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use Database\Factories\OpcionFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Opcion extends Model
 {
+    /** @use HasFactory<OpcionFactory> */
+    use HasFactory;
+
     protected $table = 'opciones';
 
     protected $fillable = [

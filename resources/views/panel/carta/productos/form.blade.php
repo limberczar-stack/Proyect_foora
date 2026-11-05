@@ -4,7 +4,7 @@
     /** @var \App\Models\Producto $producto */
     $navActivo = 'carta';
     $esNuevo = ! $producto->exists;
-    $tipo = old('tipo', $producto->tipo === 'variantes' ? 'variantes' : 'simple');
+    $tipo = old('tipo', $producto->tipo ?? 'simple');
     $etiquetasElegidas = old('etiquetas', $producto->etiquetas ?? []);
     $categoriaElegida = (int) old('categoria_id', $producto->categoria_id);
 
@@ -15,7 +15,13 @@
         $variantes[] = ['id' => null, 'nombre' => '', 'precio' => '', 'disponible' => true];
     }
 
-    $precio = old('precio', $producto->exists && $producto->tipo === 'simple' ? number_format((float) $producto->precio, 2, '.', '') : '');
+    $precio = old('precio', $producto->exists && ! $producto->tieneVariantes() ? number_format((float) $producto->precio, 2, '.', '') : '');
+
+    $gruposPorId = $gruposDisponibles->keyBy('id');
+    $gruposElegidos = collect(old('grupos', $producto->exists ? $producto->gruposOpcion->pluck('id')->all() : []))
+        ->map(fn ($id) => $gruposPorId->get((int) $id))
+        ->filter()
+        ->values();
 
     $input = 'h-11 w-full rounded-control border bg-surface px-3 text-sm text-ink placeholder:text-faint focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-0';
     $ok = 'border-line focus:border-brand-600 focus-visible:outline-brand-600/30';
@@ -103,18 +109,28 @@
                 <x-card title="Precio">
                     <fieldset>
                         <legend class="mb-2 text-sm font-medium">¿Cómo se vende?</legend>
-                        <div class="grid grid-cols-2 gap-1 rounded-control bg-raised p-1 sm:w-fit">
+                        <div class="grid grid-cols-3 gap-1 rounded-control bg-raised p-1 sm:w-fit">
                             @foreach (\App\Models\Producto::TIPOS_EDITABLES as $valor => $texto)
                                 <label class="relative">
                                     <input type="radio" name="tipo" value="{{ $valor }}" class="peer sr-only" data-tipo-radio @checked($tipo === $valor)>
-                                    <span class="press flex h-10 cursor-pointer items-center justify-center whitespace-nowrap rounded-[0.5rem] px-4 text-sm text-muted peer-checked:bg-surface peer-checked:font-medium peer-checked:text-ink peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-600">{{ $texto }}</span>
+                                    <span class="press flex h-10 cursor-pointer items-center justify-center whitespace-nowrap rounded-[0.5rem] px-2 text-sm text-muted peer-checked:bg-surface peer-checked:font-medium peer-checked:text-ink peer-checked:shadow-sm peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-600 sm:px-4">{{ $texto }}</span>
                                 </label>
                             @endforeach
                         </div>
                     </fieldset>
 
-                    {{-- Precio único --}}
-                    <div class="mt-4" data-seccion-tipo="simple" @if ($tipo !== 'simple') hidden @endif>
+                    {{-- Combo --}}
+                    <div class="mt-4" data-seccion-tipo="combo" @if ($tipo !== 'combo') hidden @endif>
+                        <p class="text-sm text-muted">Tiene precio fijo. Escribe en la descripción lo que incluye. Si el cliente debe elegir algo (por ejemplo «Chaufa de: pollo o chancho»), asígnale un grupo de opciones con extra S/ 0.</p>
+                        <label for="personas" class="mb-2 mt-4 block text-sm font-medium">Para cuántas personas</label>
+                        <input id="personas" name="personas" type="number" inputmode="numeric" min="1" max="{{ \App\Models\Producto::PERSONAS_MAXIMO }}" value="{{ old('personas', $producto->personas) }}" placeholder="Ej.: 5"
+                            @error('personas') aria-invalid="true" aria-describedby="personas-error" @enderror
+                            class="num {{ $clase('personas') }} sm:w-48">
+                        @error('personas')<p id="personas-error" class="mt-1.5 text-xs text-danger-ink">{{ $message }}</p>@enderror
+                    </div>
+
+                    {{-- Precio fijo: producto simple o combo --}}
+                    <div class="mt-4" data-seccion-tipo="simple combo" @if ($tipo === 'variantes') hidden @endif>
                         <label for="precio" class="mb-2 block text-sm font-medium">Precio</label>
                         <div class="relative sm:w-48">
                             <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">S/</span>
@@ -147,6 +163,8 @@
                         <x-button size="sm" icon="plus" class="mt-3" data-variante-agregar>Agregar variante</x-button>
                     </div>
                 </x-card>
+
+                @include('panel.carta.productos._grupos', ['gruposDisponibles' => $gruposDisponibles, 'gruposElegidos' => $gruposElegidos])
             </div>
 
             <div class="flex min-w-0 flex-col gap-4">

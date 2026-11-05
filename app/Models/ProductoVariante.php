@@ -2,12 +2,17 @@
 
 namespace App\Models;
 
+use Database\Factories\ProductoVarianteFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ProductoVariante extends Model
 {
+    /** @use HasFactory<ProductoVarianteFactory> */
+    use HasFactory;
+
     protected $table = 'producto_variantes';
 
     protected $fillable = [

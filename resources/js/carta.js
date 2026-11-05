@@ -5,13 +5,15 @@
  * - Interruptor de disponibilidad: guarda por AJAX, muestra carga y revierte si falla.
  * - Modales de confirmación para eliminar (producto y categoría).
  * - Modal de categoría: crear y editar con el mismo formulario.
- * - Formulario de producto: precio único o variantes, editor de variantes, vista previa de la foto.
+ * - Formulario de producto: precio único, variantes o combo, editor de variantes, grupos asignados, vista previa de la foto.
+ * - Formulario de grupo de opciones: tipo, límites y editor de opciones.
  */
 import $ from 'jquery';
 
 const MAX_IMAGEN_BYTES = 2 * 1024 * 1024;
 const TIPOS_IMAGEN = ['image/jpeg', 'image/png', 'image/webp'];
 const MIN_VARIANTES = 2;
+const MIN_OPCIONES = 1;
 
 $.ajaxSetup({
     headers: {
@@ -185,6 +187,150 @@ function initCategoriaModal() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Editor de filas (variantes, opciones y grupos asignados)                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Agrega, quita y reordena filas. Usa los atributos data-{nombre}, data-{nombre}-lista,
+ * -template, -agregar, -subir, -bajar y -quitar. El orden se guarda por posición.
+ */
+function editorFilas($form, nombre, minimo, alQuitar = () => {}) {
+    const fila = `[data-${nombre}]`;
+    const $lista = $form.find(`[data-${nombre}-lista]`);
+    const plantilla = $form.find(`[data-${nombre}-template]`).html();
+    let siguiente = $lista.children().length;
+
+    function actualizar() {
+        const $filas = $lista.children(fila);
+
+        $filas.each(function (i) {
+            $(this).find(`[data-${nombre}-subir]`).prop('disabled', i === 0);
+            $(this).find(`[data-${nombre}-bajar]`).prop('disabled', i === $filas.length - 1);
+            $(this).find(`[data-${nombre}-quitar]`).prop('disabled', $filas.length <= minimo);
+        });
+    }
+
+    $form.on('click', `[data-${nombre}-agregar]`, () => {
+        const $nueva = $(plantilla.replaceAll('__INDICE__', `n${siguiente++}`));
+        $lista.append($nueva);
+        actualizar();
+        $nueva.find('input[type="text"]').first().trigger('focus');
+    });
+
+    $form.on('click', `[data-${nombre}-quitar]`, function () {
+        const $fila = $(this).closest(fila);
+        const $siguienteFoco = $fila.next(fila).length ? $fila.next() : $fila.prev();
+
+        alQuitar($fila);
+        $fila.remove();
+        actualizar();
+        $siguienteFoco.find('input[type="text"], button:not(:disabled)').first().trigger('focus');
+    });
+
+    $form.on('click', `[data-${nombre}-subir]`, function () {
+        const $fila = $(this).closest(fila);
+        $fila.prev(fila).before($fila);
+        actualizar();
+        $(this).trigger('focus');
+    });
+
+    $form.on('click', `[data-${nombre}-bajar]`, function () {
+        const $fila = $(this).closest(fila);
+        $fila.next(fila).after($fila);
+        actualizar();
+        $(this).trigger('focus');
+    });
+
+    actualizar();
+
+    return { actualizar };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Grupos asignados a un producto                                              */
+/* -------------------------------------------------------------------------- */
+
+function initGruposAsignados($form) {
+    const $lista = $form.find('[data-asignado-lista]');
+    const $select = $form.find('[data-asignado-select]');
+
+    if (!$lista.length || !$select.length) {
+        return;
+    }
+
+    const plantilla = $form.find('[data-asignado-plantilla]').html();
+
+    function mostrarVacio() {
+        $form.find('[data-asignado-vacio]').prop('hidden', $lista.children().length > 0);
+    }
+
+    const editor = editorFilas($form, 'asignado', 0, ($fila) => {
+        $select.find(`option[value="${$fila.find('input[name="grupos[]"]').val()}"]`).prop('disabled', false);
+        setTimeout(mostrarVacio);
+    });
+
+    $form.on('click', '[data-asignado-elegir]', () => {
+        const $opcion = $select.find('option:selected');
+
+        if (!$opcion.val()) {
+            return;
+        }
+
+        const $nueva = $(plantilla);
+        $nueva.find('input[name="grupos[]"]').val($opcion.val());
+        $nueva.find('[data-asignado-nombre]').text($opcion.text());
+        $nueva.find('[data-asignado-detalle]').text($opcion.data('detalle'));
+        $lista.append($nueva);
+
+        $opcion.prop('disabled', true);
+        $select.val('');
+        editor.actualizar();
+        mostrarVacio();
+    });
+
+    mostrarVacio();
+}
+
+/* -------------------------------------------------------------------------- */
+/* Formulario de grupo de opciones                                             */
+/* -------------------------------------------------------------------------- */
+
+function initGrupoForm() {
+    const $form = $('[data-grupo-form]');
+
+    if (!$form.length) {
+        return;
+    }
+
+    const $minimo = $form.find('input[name="min_opciones"]');
+    const $obligatorio = $form.find('input[name="obligatorio"][type="checkbox"]');
+
+    function mostrarLimites() {
+        $form.find('[data-grupo-limites]').prop('hidden', $form.find('[data-grupo-tipo]:checked').val() !== 'multiple');
+    }
+
+    $form.on('change', '[data-grupo-tipo]', mostrarLimites);
+    mostrarLimites();
+
+    // Obligatorio y mínimo van juntos: se ajustan para evitar el error antes de enviar.
+    $obligatorio.on('change', function () {
+        const minimo = Number($minimo.val()) || 0;
+
+        if (this.checked && minimo < 1) {
+            $minimo.val(1);
+        } else if (!this.checked) {
+            $minimo.val(0);
+        }
+    });
+
+    $minimo.on('input', function () {
+        $obligatorio.prop('checked', Number(this.value) > 0);
+    });
+
+    editorFilas($form, 'opcion', MIN_OPCIONES);
+}
+
+/* -------------------------------------------------------------------------- */
 /* Formulario de producto                                                      */
 /* -------------------------------------------------------------------------- */
 
@@ -195,64 +341,20 @@ function initProductoForm() {
         return;
     }
 
-    // Precio único o variantes.
+    // Precio único, variantes o combo.
     function mostrarTipo() {
         const tipo = $form.find('[data-tipo-radio]:checked').val();
 
         $form.find('[data-seccion-tipo]').each(function () {
-            $(this).prop('hidden', $(this).data('seccion-tipo') !== tipo);
+            $(this).prop('hidden', !String($(this).data('seccion-tipo')).split(' ').includes(tipo));
         });
     }
 
     $form.on('change', '[data-tipo-radio]', mostrarTipo);
     mostrarTipo();
 
-    // Editor de variantes.
-    const $lista = $form.find('[data-variantes-lista]');
-    const plantilla = $form.find('[data-variante-template]').html();
-    let siguiente = $lista.children().length;
-
-    function actualizarControles() {
-        const $filas = $lista.children('[data-variante]');
-
-        $filas.each(function (i) {
-            $(this).find('[data-variante-subir]').prop('disabled', i === 0);
-            $(this).find('[data-variante-bajar]').prop('disabled', i === $filas.length - 1);
-            $(this).find('[data-variante-quitar]').prop('disabled', $filas.length <= MIN_VARIANTES);
-        });
-    }
-
-    $form.on('click', '[data-variante-agregar]', () => {
-        const $fila = $(plantilla.replaceAll('__INDICE__', `n${siguiente++}`));
-        $lista.append($fila);
-        actualizarControles();
-        $fila.find('input[type="text"]').first().trigger('focus');
-    });
-
-    $form.on('click', '[data-variante-quitar]', function () {
-        const $fila = $(this).closest('[data-variante]');
-        const $siguienteFoco = $fila.next('[data-variante]').length ? $fila.next() : $fila.prev();
-
-        $fila.remove();
-        actualizarControles();
-        $siguienteFoco.find('input[type="text"]').first().trigger('focus');
-    });
-
-    $form.on('click', '[data-variante-subir]', function () {
-        const $fila = $(this).closest('[data-variante]');
-        $fila.prev('[data-variante]').before($fila);
-        actualizarControles();
-        $(this).trigger('focus');
-    });
-
-    $form.on('click', '[data-variante-bajar]', function () {
-        const $fila = $(this).closest('[data-variante]');
-        $fila.next('[data-variante]').after($fila);
-        actualizarControles();
-        $(this).trigger('focus');
-    });
-
-    actualizarControles();
+    editorFilas($form, 'variante', MIN_VARIANTES);
+    initGruposAsignados($form);
 
     // Nota de "foto opcional" según la categoría.
     const $categoria = $form.find('[data-categoria-select]');
@@ -310,4 +412,5 @@ $(() => {
     initEliminar();
     initCategoriaModal();
     initProductoForm();
+    initGrupoForm();
 });

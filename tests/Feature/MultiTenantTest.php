@@ -28,8 +28,8 @@ class MultiTenantTest extends TestCase
         $this->restauranteA = Restaurante::factory()->create();
         $this->restauranteB = Restaurante::factory()->create();
 
-        $this->mesaA = Mesa::factory()->for(Area::factory()->for($this->restauranteA))->create(['restaurante_id' => $this->restauranteA->id, 'codigo' => 'A1']);
-        $this->mesaB = Mesa::factory()->for(Area::factory()->for($this->restauranteB))->create(['restaurante_id' => $this->restauranteB->id, 'codigo' => 'B1']);
+        $this->mesaA = Mesa::factory()->for(Area::factory()->for($this->restauranteA)->state(['nombre' => 'Salón A']))->create(['restaurante_id' => $this->restauranteA->id, 'codigo' => 'A1']);
+        $this->mesaB = Mesa::factory()->for(Area::factory()->for($this->restauranteB)->state(['nombre' => 'Salón B']))->create(['restaurante_id' => $this->restauranteB->id, 'codigo' => 'B1']);
     }
 
     public function test_staff_member_only_sees_their_own_restaurant_data(): void

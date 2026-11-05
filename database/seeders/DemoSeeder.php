@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Models\Area;
 use App\Models\CategoriaProducto;
+use App\Models\GrupoOpcion;
 use App\Models\Mesa;
 use App\Models\Plan;
 use App\Models\Producto;
@@ -104,11 +105,11 @@ class DemoSeeder extends Seeder
         $frias = $this->categoria($restaurante, 'Frías', 0, padre: $bebidas, conFotos: false);
         $calientes = $this->categoria($restaurante, 'Calientes', 1, padre: $bebidas, conFotos: false);
 
-        $this->producto($pollos, '1/4 de pollo a la brasa', 'Con papas fritas, ensalada fresca y cremas de la casa.', variantes: ['Pierna' => 17.00, 'Pecho' => 18.50], destacado: true);
-        $this->producto($pollos, '1/2 pollo a la brasa', 'Con papas fritas familiares y ensalada.', precio: 32.00);
-        $this->producto($pollos, 'Pollo entero a la brasa', 'Con papas fritas familiares, ensalada y gaseosa de 1.5 L.', precio: 58.00, destacado: true);
+        $cuartoPollo = $this->producto($pollos, '1/4 de pollo a la brasa', 'Con papas fritas, ensalada fresca y cremas de la casa.', variantes: ['Pierna' => 17.00, 'Pecho' => 18.50], destacado: true);
+        $medioPollo = $this->producto($pollos, '1/2 pollo a la brasa', 'Con papas fritas familiares y ensalada.', precio: 32.00);
+        $polloEntero = $this->producto($pollos, 'Pollo entero a la brasa', 'Con papas fritas familiares, ensalada y gaseosa de 1.5 L.', precio: 58.00, destacado: true);
         $this->producto($parrillas, 'Anticuchos de corazón', 'Dos palitos con papa dorada y choclo.', precio: 18.00, etiquetas: ['picante']);
-        $this->producto($parrillas, 'Parrilla personal', null, precio: 38.00, etiquetas: ['nuevo']);
+        $parrillaPersonal = $this->producto($parrillas, 'Parrilla personal', null, precio: 38.00, etiquetas: ['nuevo']);
         $this->producto($acompanamientos, 'Papas fritas', 'Papa amarilla huanuqueña frita al momento.', variantes: ['Personal' => 8.00, 'Familiar' => 15.00], etiquetas: ['vegetariano']);
         $this->producto($acompanamientos, 'Ensalada fresca', 'Lechuga, tomate, pepino y zanahoria con vinagreta.', precio: 7.00, etiquetas: ['vegetariano', 'sin_gluten']);
         $this->producto($frias, 'Chicha morada', 'Preparada en casa con maíz morado.', variantes: ['Vaso' => 4.00, '1/2 litro' => 8.00, 'Jarra 1 L' => 14.00], estacion: 'barra');
@@ -116,6 +117,15 @@ class DemoSeeder extends Seeder
         $this->producto($frias, 'Inca Kola 500 ml', null, precio: 4.50, estacion: 'barra');
         $this->producto($calientes, 'Café pasado', 'Café de Chinchao.', precio: 5.00, estacion: 'barra');
         $this->producto($calientes, 'Infusión de manzanilla', 'Con miel de abeja.', precio: 3.50, estacion: 'barra', disponible: false);
+
+        $guarnicion = $this->grupo($restaurante, 'Elige tu guarnición', ['Papas fritas' => 0, 'Ensalada' => 0, 'Arroz' => 0], obligatorio: true);
+        $adicionales = $this->grupo($restaurante, 'Adicionales', ['Piña' => 3, 'Plátano' => 3, 'Huevo' => 3, 'Tocino' => 5], tipo: 'multiple');
+        $gaseosa = $this->grupo($restaurante, 'Gaseosa', ['Coca Cola' => 0, 'Inca Kola' => 0, 'Fanta' => 0, 'Sprite' => 0], obligatorio: true);
+
+        $this->asignarGrupos($cuartoPollo, [$guarnicion, $adicionales]);
+        $this->asignarGrupos($medioPollo, [$guarnicion, $adicionales]);
+        $this->asignarGrupos($polloEntero, [$guarnicion, $adicionales, $gaseosa]);
+        $this->asignarGrupos($parrillaPersonal, [$adicionales]);
     }
 
     private function cartaLaBahia(Restaurante $restaurante): void
@@ -132,7 +142,7 @@ class DemoSeeder extends Seeder
     }
 
     /**
-     * Chifa: variantes de tamaño (Taza, Personal, Mediano, Familiar).
+     * Chifa: variantes de tamaño (Taza, Personal, Mediano, Familiar), elección de sabor y un combo.
      */
     private function cartaDragonDorado(Restaurante $restaurante): void
     {
@@ -142,8 +152,10 @@ class DemoSeeder extends Seeder
 
         $arroces = $this->categoria($restaurante, 'Arroces', 0);
         $tallarines = $this->categoria($restaurante, 'Tallarines', 1);
-        $entradas = $this->categoria($restaurante, 'Entradas y sopas', 2);
-        $bebidas = $this->categoria($restaurante, 'Bebidas', 3, conFotos: false);
+        $platos = $this->categoria($restaurante, 'Platos de la casa', 2);
+        $entradas = $this->categoria($restaurante, 'Entradas y sopas', 3);
+        $combos = $this->categoria($restaurante, 'Combos', 4);
+        $bebidas = $this->categoria($restaurante, 'Bebidas', 5, conFotos: false);
 
         $this->producto($arroces, 'Chaufa de pollo', 'Arroz salteado al wok con pollo, huevo y cebollita china.', variantes: $tamanos(11.00, 22.00, 32.00, 44.00), destacado: true);
         $this->producto($arroces, 'Chaufa especial', 'Con pollo, chancho asado, langostinos y tortilla.', variantes: $tamanos(13.00, 25.00, 36.00, 49.00));
@@ -152,6 +164,12 @@ class DemoSeeder extends Seeder
         $this->producto($entradas, 'Wantán frito', '10 unidades con salsa de tamarindo.', precio: 12.00);
         $this->producto($entradas, 'Sopa wantán', 'Caldo de pollo con wantanes y verduras.', variantes: ['Personal' => 14.00, 'Familiar' => 26.00]);
         $this->producto($bebidas, 'Té jazmín', null, variantes: ['Taza' => 3.00, 'Tetera' => 9.00], estacion: 'barra');
+
+        $tipakay = $this->producto($platos, 'Tipakay de pollo', 'Pollo crocante con verduras al wok y arroz blanco.', precio: 26.00);
+        $banquete = $this->producto($combos, 'Banquete Dragón para 5', 'Incluye chaufa familiar, tallarín saltado familiar, 20 wantanes fritos, tipakay de pollo y sopa wantán familiar.', precio: 129.00, destacado: true, personas: 5);
+
+        $this->asignarGrupos($tipakay, [$this->grupo($restaurante, 'Sabor', ['Salado' => 0, 'Dulce' => 0], obligatorio: true)]);
+        $this->asignarGrupos($banquete, [$this->grupo($restaurante, 'Chaufa de', ['Pollo' => 0, 'Chancho' => 0], obligatorio: true)]);
     }
 
     private function categoria(Restaurante $restaurante, string $nombre, int $orden, ?CategoriaProducto $padre = null, bool $conFotos = true, ?string $descripcion = null): CategoriaProducto
@@ -176,12 +194,14 @@ class DemoSeeder extends Seeder
         string $estacion = 'cocina',
         bool $destacado = false,
         bool $disponible = true,
+        ?int $personas = null,
     ): Producto {
         $producto = Producto::withTrashed()->updateOrCreate(
             ['restaurante_id' => $categoria->restaurante_id, 'nombre' => $nombre],
             [
                 'categoria_id' => $categoria->id,
-                'tipo' => $variantes === [] ? 'simple' : 'variantes',
+                'tipo' => $personas !== null ? 'combo' : ($variantes === [] ? 'simple' : 'variantes'),
+                'personas' => $personas,
                 'descripcion' => $descripcion,
                 'precio' => $variantes === [] ? $precio : min($variantes),
                 'estacion' => $estacion,
@@ -203,6 +223,42 @@ class DemoSeeder extends Seeder
         }
 
         return $producto;
+    }
+
+    /**
+     * @param  array<string, float|int>  $opciones  nombre => precio extra
+     */
+    private function grupo(Restaurante $restaurante, string $nombre, array $opciones, string $tipo = 'unica', bool $obligatorio = false): GrupoOpcion
+    {
+        $grupo = GrupoOpcion::updateOrCreate(
+            ['restaurante_id' => $restaurante->id, 'nombre' => $nombre],
+            [
+                'tipo' => $tipo,
+                'obligatorio' => $obligatorio,
+                'min_opciones' => $obligatorio ? 1 : 0,
+                'max_opciones' => $tipo === 'unica' ? 1 : null,
+                'activo' => true,
+            ],
+        );
+
+        // Igual que las variantes: repetir el seeder deja siempre los mismos datos.
+        $grupo->opciones()->delete();
+
+        foreach (array_keys($opciones) as $orden => $nombreOpcion) {
+            $grupo->opciones()->create(['nombre' => $nombreOpcion, 'precio_extra' => $opciones[$nombreOpcion], 'orden' => $orden]);
+        }
+
+        return $grupo;
+    }
+
+    /**
+     * @param  list<GrupoOpcion>  $grupos  en el orden que verá el cliente
+     */
+    private function asignarGrupos(Producto $producto, array $grupos): void
+    {
+        $producto->gruposOpcion()->sync(
+            collect($grupos)->mapWithKeys(fn (GrupoOpcion $grupo, int $orden): array => [$grupo->id => ['orden' => $orden]]),
+        );
     }
 
     private function usuario(string $email, string $nombre, string $rol, ?Restaurante $restaurante): User

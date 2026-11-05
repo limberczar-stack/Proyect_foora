@@ -3,7 +3,10 @@
 namespace Tests\Feature\Carta;
 
 use App\Models\CategoriaProducto;
+use App\Models\GrupoOpcion;
+use App\Models\Opcion;
 use App\Models\Producto;
+use App\Models\ProductoVariante;
 use App\Models\Restaurante;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -72,6 +75,82 @@ class CartaPermisosTest extends TestCase
 
         $this->assertNotSoftDeleted($this->producto);
         $this->assertModelExists($this->categoria);
+    }
+
+    public function test_cashier_sees_option_groups_without_management_actions(): void
+    {
+        $grupo = GrupoOpcion::factory()->for($this->restaurante)->create(['nombre' => 'Guarnición']);
+        Opcion::factory()->for($grupo, 'grupo')->create();
+
+        $this->actingAs(User::factory()->cajero($this->restaurante)->create())
+            ->get(route('panel.carta.grupos.index'))
+            ->assertOk()
+            ->assertSee('Guarnición')
+            ->assertSee('data-disponibilidad', false)
+            ->assertDontSee('Nuevo grupo')
+            ->assertDontSee(route('panel.carta.grupos.edit', $grupo))
+            ->assertDontSee('data-eliminar-url', false);
+    }
+
+    public function test_cashier_changes_option_and_variant_availability_only(): void
+    {
+        $grupo = GrupoOpcion::factory()->for($this->restaurante)->create();
+        $opcion = Opcion::factory()->for($grupo, 'grupo')->create();
+        $variante = ProductoVariante::factory()->for($this->producto)->create(['nombre' => 'Familiar']);
+        $this->producto->update(['tipo' => 'variantes']);
+
+        $this->actingAs(User::factory()->cajero($this->restaurante)->create());
+
+        $this->get(route('panel.carta.productos.index'))
+            ->assertSee('Familiar')
+            ->assertSee(route('panel.carta.productos.variantes.disponibilidad', [$this->producto, $variante]));
+
+        $this->patchJson(route('panel.carta.grupos.opciones.disponibilidad', [$grupo, $opcion]), ['disponible' => false])->assertOk();
+        $this->patchJson(route('panel.carta.productos.variantes.disponibilidad', [$this->producto, $variante]), ['disponible' => false])->assertOk();
+
+        $this->assertFalse($opcion->fresh()->disponible);
+        $this->assertFalse($variante->fresh()->disponible);
+    }
+
+    public function test_cashier_cannot_manage_option_groups(): void
+    {
+        $grupo = GrupoOpcion::factory()->for($this->restaurante)->create(['nombre' => 'Original']);
+
+        $this->actingAs(User::factory()->cajero($this->restaurante)->create());
+
+        $this->get(route('panel.carta.grupos.create'))->assertForbidden();
+        $this->post(route('panel.carta.grupos.store'), ['nombre' => 'X'])->assertForbidden();
+        $this->get(route('panel.carta.grupos.edit', $grupo))->assertForbidden();
+        $this->put(route('panel.carta.grupos.update', $grupo), ['nombre' => 'X'])->assertForbidden();
+        $this->delete(route('panel.carta.grupos.destroy', $grupo))->assertForbidden();
+
+        $this->assertSame('Original', $grupo->fresh()->nombre);
+    }
+
+    public function test_other_staff_roles_cannot_touch_option_groups_or_availability(): void
+    {
+        $grupo = GrupoOpcion::factory()->for($this->restaurante)->create();
+        $opcion = Opcion::factory()->for($grupo, 'grupo')->create();
+        $variante = ProductoVariante::factory()->for($this->producto)->create();
+
+        foreach (['mesero', 'cocina', 'repartidor'] as $rol) {
+            $this->actingAs(User::factory()->personal($rol, $this->restaurante)->create());
+
+            $this->get(route('panel.carta.grupos.index'))->assertForbidden();
+            $this->patchJson(route('panel.carta.grupos.opciones.disponibilidad', [$grupo, $opcion]), ['disponible' => false])->assertForbidden();
+            $this->patchJson(route('panel.carta.productos.variantes.disponibilidad', [$this->producto, $variante]), ['disponible' => false])->assertForbidden();
+        }
+
+        $this->assertTrue($opcion->fresh()->disponible);
+        $this->assertTrue($variante->fresh()->disponible);
+    }
+
+    public function test_superadmin_is_asked_to_select_a_restaurant_for_option_groups(): void
+    {
+        $this->actingAs(User::factory()->superadmin()->create())
+            ->get(route('panel.carta.grupos.index'))
+            ->assertForbidden()
+            ->assertSee('Selecciona un restaurante');
     }
 
     public function test_other_staff_roles_cannot_open_the_menu(): void

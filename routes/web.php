@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Panel\CategoriaController;
+use App\Http\Controllers\Panel\GrupoOpcionController;
 use App\Http\Controllers\Panel\ProductoController;
 use Illuminate\Support\Facades\Route;
 
@@ -21,7 +22,7 @@ Route::post('/logout', [LoginController::class, 'destroy'])
 Route::middleware(['auth', 'panel'])->prefix('panel')->name('panel.')->group(function () {
     Route::view('/', 'panel.inicio')->name('inicio');
 
-    // Carta: los permisos por rol viven en ProductoPolicy y CategoriaProductoPolicy.
+    // Carta: los permisos por rol viven en ProductoPolicy, CategoriaProductoPolicy y GrupoOpcionPolicy.
     Route::prefix('carta')->name('carta.')->group(function () {
         Route::redirect('/', '/panel/carta/productos')->name('index');
 
@@ -30,6 +31,16 @@ Route::middleware(['auth', 'panel'])->prefix('panel')->name('panel.')->group(fun
             ->parameters(['productos' => 'producto']);
         Route::patch('productos/{producto}/disponibilidad', [ProductoController::class, 'disponibilidad'])
             ->name('productos.disponibilidad');
+        Route::patch('productos/{producto}/variantes/{variante}/disponibilidad', [ProductoController::class, 'disponibilidadVariante'])
+            ->scopeBindings()
+            ->name('productos.variantes.disponibilidad');
+
+        Route::resource('grupos', GrupoOpcionController::class)
+            ->except('show')
+            ->parameters(['grupos' => 'grupo']);
+        Route::patch('grupos/{grupo}/opciones/{opcion}/disponibilidad', [GrupoOpcionController::class, 'disponibilidadOpcion'])
+            ->scopeBindings()
+            ->name('grupos.opciones.disponibilidad');
 
         Route::get('categorias', [CategoriaController::class, 'index'])->name('categorias.index');
         Route::post('categorias', [CategoriaController::class, 'store'])->name('categorias.store');

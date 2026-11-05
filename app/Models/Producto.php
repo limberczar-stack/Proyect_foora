@@ -31,16 +31,19 @@ class Producto extends Model
     ];
 
     /**
-     * Tipos que se pueden editar en la etapa 1 (los combos llegan en la etapa 2).
+     * Cómo se vende el producto: clave => texto visible.
      *
      * @var array<string, string>
      */
     public const TIPOS_EDITABLES = [
         'simple' => 'Precio único',
         'variantes' => 'Con variantes',
+        'combo' => 'Combo',
     ];
 
     public const PRECIO_MAXIMO = 9999.99;
+
+    public const PERSONAS_MAXIMO = 100;
 
     protected $table = 'productos';
 
@@ -78,6 +81,11 @@ class Producto extends Model
     public function tieneVariantes(): bool
     {
         return $this->tipo === 'variantes';
+    }
+
+    public function esCombo(): bool
+    {
+        return $this->tipo === 'combo';
     }
 
     public function imagenUrl(): ?string
