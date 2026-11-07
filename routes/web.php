@@ -2,9 +2,13 @@
 
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Panel\CategoriaController;
+use App\Http\Controllers\Panel\ConfiguracionController;
+use App\Http\Controllers\Panel\EstadoLocalController;
 use App\Http\Controllers\Panel\GrupoOpcionController;
+use App\Http\Controllers\Panel\MiCuentaController;
 use App\Http\Controllers\Panel\PedidoController;
 use App\Http\Controllers\Panel\ProductoController;
+use App\Http\Controllers\Panel\UsuarioController;
 use App\Http\Controllers\PedidoPublicoController;
 use App\Http\Controllers\VitrinaController;
 use App\Support\SlugsReservados;
@@ -30,6 +34,34 @@ Route::post('/logout', [LoginController::class, 'destroy'])
 
 Route::middleware(['auth', 'panel'])->prefix('panel')->name('panel.')->group(function () {
     Route::view('/', 'panel.inicio')->name('inicio');
+
+    // Mi cuenta: lo único accesible con una contraseña temporal (EnsurePanelAccess).
+    Route::get('mi-cuenta', [MiCuentaController::class, 'show'])->name('mi-cuenta');
+    Route::put('mi-cuenta/password', [MiCuentaController::class, 'password'])
+        ->middleware('throttle:cambiar-password')
+        ->name('mi-cuenta.password');
+    Route::delete('mi-cuenta/sesiones', [MiCuentaController::class, 'cerrarSesiones'])
+        ->middleware('throttle:cambiar-password')
+        ->name('mi-cuenta.sesiones');
+
+    // Estado del local (interruptor de la barra lateral): admin y cajero, según RestaurantePolicy.
+    Route::patch('estado-local', [EstadoLocalController::class, 'update'])->name('estado-local');
+
+    // Configuración: solo el admin, según RestaurantePolicy y UserPolicy.
+    Route::prefix('configuracion')->name('configuracion.')->group(function () {
+        Route::redirect('/', '/panel/configuracion/general')->name('index');
+
+        foreach (['general', 'horario', 'pago', 'pedidos', 'notificaciones'] as $seccion) {
+            Route::get($seccion, [ConfiguracionController::class, $seccion])->name($seccion);
+            Route::put($seccion, [ConfiguracionController::class, 'actualizar'.ucfirst($seccion)])->name($seccion.'.update');
+        }
+
+        Route::get('usuarios', [UsuarioController::class, 'index'])->name('usuarios');
+        Route::post('usuarios', [UsuarioController::class, 'store'])->name('usuarios.store');
+        Route::put('usuarios/{usuario}', [UsuarioController::class, 'update'])->whereNumber('usuario')->name('usuarios.update');
+        Route::patch('usuarios/{usuario}/estado', [UsuarioController::class, 'estado'])->whereNumber('usuario')->name('usuarios.estado');
+        Route::post('usuarios/{usuario}/password', [UsuarioController::class, 'restablecer'])->whereNumber('usuario')->name('usuarios.password');
+    });
 
     // Pedidos: los permisos por rol viven en PedidoPolicy.
     Route::get('pedidos', [PedidoController::class, 'index'])->name('pedidos.index');

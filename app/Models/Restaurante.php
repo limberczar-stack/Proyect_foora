@@ -18,6 +18,17 @@ class Restaurante extends Model
     /** @use HasFactory<RestauranteFactory> */
     use HasFactory, SoftDeletes;
 
+    /**
+     * Avisos del panel activos cuando el local todavía no eligió.
+     *
+     * @var array{nuevos_pedidos: bool, reservas: bool, alertas: bool}
+     */
+    public const NOTIFICACIONES_POR_DEFECTO = [
+        'nuevos_pedidos' => true,
+        'reservas' => true,
+        'alertas' => true,
+    ];
+
     protected $table = 'restaurantes';
 
     protected $fillable = [
@@ -84,6 +95,31 @@ class Restaurante extends Model
     public function estaAbierto(): bool
     {
         return $this->estado_local === 'abierto';
+    }
+
+    /**
+     * Preferencias de avisos del panel, con los valores por defecto para las claves que falten.
+     *
+     * @return array{nuevos_pedidos: bool, reservas: bool, alertas: bool}
+     */
+    public function notificaciones(): array
+    {
+        $guardadas = is_array($this->config_notificaciones) ? $this->config_notificaciones : [];
+        $resultado = [];
+
+        foreach (self::NOTIFICACIONES_POR_DEFECTO as $clave => $porDefecto) {
+            $resultado[$clave] = array_key_exists($clave, $guardadas) ? (bool) $guardadas[$clave] : $porDefecto;
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * URL de la vitrina pública del local.
+     */
+    public function urlVitrina(): string
+    {
+        return route('vitrina.show', $this->slug);
     }
 
     /**

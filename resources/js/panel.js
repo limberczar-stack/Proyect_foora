@@ -197,6 +197,67 @@ function initTabs() {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Pestañas que no caben                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * [data-scroll-tabs] con una pista .scroll-tabs-pista que desplaza en horizontal.
+ * Marca data-desborde (inicio, fin, ambos) para que el CSS desvanezca el borde con pestañas
+ * escondidas y muestre la flecha; la flecha avanza casi un ancho. La pestaña activa se deja a la vista.
+ * Se vuelve a enlazar sola cuando la lista se reemplaza por AJAX (evento foora:contenido).
+ */
+function initScrollTabs(contexto = document) {
+    $(contexto)
+        .find('[data-scroll-tabs]')
+        .addBack('[data-scroll-tabs]')
+        .each(function () {
+            const raiz = this;
+            const pista = raiz.querySelector('.scroll-tabs-pista');
+
+            if (!pista || raiz.dataset.scrollTabsListo === '1') {
+                return;
+            }
+
+            raiz.dataset.scrollTabsListo = '1';
+
+            const medir = () => {
+                const resto = pista.scrollWidth - pista.clientWidth - pista.scrollLeft;
+                const alInicio = pista.scrollLeft > 2;
+                const alFin = resto > 2;
+
+                raiz.dataset.desborde = alInicio && alFin ? 'ambos' : alFin ? 'fin' : alInicio ? 'inicio' : 'no';
+            };
+
+            const activa = pista.querySelector('[aria-current="page"], [aria-selected="true"]');
+
+            if (activa) {
+                const borde = activa.offsetLeft + activa.offsetWidth - pista.clientWidth;
+
+                if (borde > 0) {
+                    pista.scrollLeft = borde + 48;
+                }
+            }
+
+            $(raiz)
+                .find('.scroll-tabs-flecha')
+                .on('click', function () {
+                    const paso = Math.max(120, pista.clientWidth * 0.8);
+                    pista.scrollBy({ left: this.dataset.lado === 'fin' ? paso : -paso });
+                });
+
+            pista.addEventListener('scroll', medir, { passive: true });
+
+            if ('ResizeObserver' in window) {
+                new ResizeObserver(medir).observe(pista);
+            } else {
+                $(window).on('resize', medir);
+            }
+
+            medir();
+        });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Modales                                                                     */
 /* -------------------------------------------------------------------------- */
 
@@ -283,6 +344,9 @@ $(() => {
     initSidebar();
     initDropdowns();
     initTabs();
+    initScrollTabs();
     initModals();
     initLoadingForms();
+
+    $(document).on('foora:contenido', (evento) => initScrollTabs(evento.target));
 });

@@ -36,7 +36,8 @@ class PanelAccessTest extends TestCase
             ->assertSee('Pollería El Buen Sabor')
             ->assertSee('Rosa Quispe')
             ->assertSee('Administrador')
-            ->assertSee('disponible en Configuración');
+            ->assertDontSee('disponible en Configuración')
+            ->assertSee('data-estado-local', false);
     }
 
     public function test_customer_is_forbidden(): void

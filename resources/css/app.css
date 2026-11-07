@@ -372,6 +372,130 @@
             box-shadow 150ms ease;
     }
 
+    /*
+     * Pestañas que no caben: el borde que esconde pestañas se desvanece y aparece una flecha.
+     * resources/js/panel.js marca data-desborde="inicio|fin|ambos" en [data-scroll-tabs].
+     */
+    .scroll-tabs {
+        position: relative;
+    }
+
+    .scroll-tabs-pista {
+        scrollbar-width: none;
+        scroll-behavior: smooth;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
+    }
+
+    .scroll-tabs[data-desborde='fin'] .scroll-tabs-pista {
+        mask-image: linear-gradient(to right, #000 calc(100% - 3.5rem), transparent);
+    }
+
+    .scroll-tabs[data-desborde='inicio'] .scroll-tabs-pista {
+        mask-image: linear-gradient(to left, #000 calc(100% - 3.5rem), transparent);
+    }
+
+    .scroll-tabs[data-desborde='ambos'] .scroll-tabs-pista {
+        mask-image: linear-gradient(to right, transparent, #000 3.5rem, #000 calc(100% - 3.5rem), transparent);
+    }
+
+    .scroll-tabs-flecha {
+        position: absolute;
+        top: 50%;
+        display: none;
+        width: 2rem;
+        height: 2rem;
+        margin-top: -1rem;
+        align-items: center;
+        justify-content: center;
+        border-radius: 9999px;
+        border: 1px solid var(--color-line);
+        background: var(--color-surface);
+        color: var(--color-ink);
+        transition:
+            transform 150ms var(--ease-out),
+            background-color 150ms ease;
+
+        &:active {
+            transform: scale(0.94);
+        }
+    }
+
+    .scroll-tabs-flecha[data-lado='fin'] {
+        right: 0;
+    }
+
+    .scroll-tabs-flecha[data-lado='inicio'] {
+        left: 0;
+    }
+
+    .scroll-tabs:is([data-desborde='fin'], [data-desborde='ambos']) .scroll-tabs-flecha[data-lado='fin'],
+    .scroll-tabs:is([data-desborde='inicio'], [data-desborde='ambos']) .scroll-tabs-flecha[data-lado='inicio'] {
+        display: inline-flex;
+    }
+
+    /* Interruptor del estado del local (barra lateral) */
+    .estado-local-pista {
+        background: var(--color-control);
+        transition: background-color 200ms ease;
+    }
+
+    .estado-local-punto {
+        background: var(--color-neutral-dot);
+        transition: background-color 200ms ease;
+    }
+
+    .estado-local-perilla {
+        transition: transform 200ms var(--ease-out);
+    }
+
+    .estado-local[aria-checked='true'] {
+        .estado-local-pista {
+            background: var(--color-success-fill);
+        }
+
+        .estado-local-punto {
+            background: var(--color-success-dot);
+        }
+
+        .estado-local-perilla {
+            transform: translateX(1rem);
+        }
+    }
+
+    .estado-local[aria-busy='true'] {
+        cursor: progress;
+
+        .estado-local-carga {
+            display: block;
+        }
+    }
+
+    /* Configuración: barra de guardado que entra cuando hay un estado que contar */
+    .guardado-estado {
+        transition: opacity 150ms var(--ease-out);
+
+        @starting-style {
+            opacity: 0;
+        }
+    }
+
+    /* Contraseña temporal: se ve grande y se puede seleccionar de una vez */
+    .clave-temporal {
+        font-variant-numeric: tabular-nums;
+        letter-spacing: 0.08em;
+        user-select: all;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .estado-local-perilla,
+        .scroll-tabs-pista {
+            transition: none;
+            scroll-behavior: auto;
+        }
+    }
 }
 
 /* Tabla que se convierte en lista de dos líneas en celular.

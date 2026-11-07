@@ -33,28 +33,33 @@
     ];
 @endphp
 
-<nav aria-label="Estados de los pedidos" class="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0 [scrollbar-width:none]">
-    <ul class="flex min-w-max gap-1 border-b border-line">
-        @foreach ($pestanas as $clave => $texto)
-            @php $activa = $clave === $estado; @endphp
-            <li>
-                <a href="{{ $enlace(['estado' => $clave, 'page' => null]) }}" @if ($activa) aria-current="page" @endif
-                    @class([
-                        'tab-indicator -mb-px inline-flex h-11 items-center gap-2 whitespace-nowrap px-3 text-sm lg:h-10',
-                        'font-medium text-ink shadow-[inset_0_-2px_0_var(--color-brand-700)]' => $activa,
-                        'text-muted hover:text-ink' => ! $activa,
-                    ])>
-                    {{ $texto }}
-                    <span data-contador="{{ $clave }}" @class([
-                        'num inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-medium',
-                        'bg-brand-100 text-brand-800' => $activa,
-                        'bg-raised text-muted' => ! $activa,
-                    ])>{{ $contadores[$clave] ?? 0 }}</span>
-                </a>
-            </li>
-        @endforeach
-    </ul>
-</nav>
+{{-- Compactas desde lg; si aun así no caben (p. ej. 1366 px con el detalle abierto), el borde se desvanece y aparece una flecha --}}
+<div class="scroll-tabs -mx-4 sm:mx-0" data-scroll-tabs>
+    <nav aria-label="Estados de los pedidos" class="scroll-tabs-pista overflow-x-auto px-4 sm:px-0">
+        <ul class="flex min-w-max gap-1 border-b border-line lg:gap-0.5">
+            @foreach ($pestanas as $clave => $texto)
+                @php $activa = $clave === $estado; @endphp
+                <li>
+                    <a href="{{ $enlace(['estado' => $clave, 'page' => null]) }}" @if ($activa) aria-current="page" @endif
+                        @class([
+                            'tab-indicator -mb-px inline-flex h-11 items-center gap-2 whitespace-nowrap px-3 text-sm lg:h-10 lg:gap-1.5 lg:px-2 lg:text-[0.8125rem]',
+                            'font-medium text-ink shadow-[inset_0_-2px_0_var(--color-brand-700)]' => $activa,
+                            'text-muted hover:text-ink' => ! $activa,
+                        ])>
+                        {{ $texto }}
+                        <span data-contador="{{ $clave }}" @class([
+                            'num inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-medium lg:px-1',
+                            'bg-brand-100 text-brand-800' => $activa,
+                            'bg-raised text-muted' => ! $activa,
+                        ])>{{ $contadores[$clave] ?? 0 }}</span>
+                    </a>
+                </li>
+            @endforeach
+        </ul>
+    </nav>
+    <button type="button" class="scroll-tabs-flecha" data-lado="inicio" tabindex="-1" aria-hidden="true"><x-icon name="chevron-left" size="16" /></button>
+    <button type="button" class="scroll-tabs-flecha" data-lado="fin" tabindex="-1" aria-hidden="true"><x-icon name="chevron-right" size="16" /></button>
+</div>
 
 <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
     <div class="flex gap-1" role="group" aria-label="Tipo de pedido">

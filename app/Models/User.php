@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 #[Hidden(['password', 'remember_token'])]
@@ -66,7 +67,21 @@ class User extends Authenticatable
             'password' => 'hashed',
             'activo' => 'boolean',
             'ultimo_acceso_at' => 'datetime',
+            'debe_cambiar_password' => 'boolean',
         ];
+    }
+
+    /**
+     * Cierra sus sesiones en todos los dispositivos (menos la indicada) y anula su "recordarme".
+     */
+    public function cerrarSesiones(?string $exceptoSesionId = null): void
+    {
+        DB::table(config('session.table', 'sessions'))
+            ->where('user_id', $this->id)
+            ->when($exceptoSesionId, fn ($query) => $query->where('id', '!=', $exceptoSesionId))
+            ->delete();
+
+        $this->forceFill(['remember_token' => null])->saveQuietly();
     }
 
     public function esSuperadmin(): bool

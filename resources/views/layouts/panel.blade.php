@@ -12,7 +12,7 @@
      * - $navActivo: clave del ítem activo del menú
      *
      * @var array{nombre: string, rol: string, iniciales: string}|null $panelUsuario
-     * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string}|null $panelRestaurante
+     * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string, puedeCambiarEstado: bool, puedeConfigurar: bool}|null $panelRestaurante
      */
     $panelUsuario ??= ['nombre' => 'Invitado', 'rol' => '', 'iniciales' => '?'];
     $panelRestaurante ??= null;
@@ -97,28 +97,35 @@
                     </div>
                 </div>
 
-                {{-- Estado del local: refleja el dato real; se cambiará desde Configuración --}}
-                <button
-                    type="button"
-                    role="switch"
-                    aria-checked="{{ $panelRestaurante['abierto'] ? 'true' : 'false' }}"
-                    aria-describedby="estado-local-ayuda"
-                    disabled
-                    class="mt-3 flex h-11 w-full cursor-not-allowed items-center justify-between rounded-control bg-raised px-3 text-sm lg:h-10"
-                >
-                    <span class="flex items-center gap-2">
+                {{-- Estado del local: admin y cajero lo cambian aquí (resources/js/estado-local.js) --}}
+                @if ($panelRestaurante['puedeCambiarEstado'] ?? false)
+                    <button
+                        type="button"
+                        role="switch"
+                        aria-checked="{{ $panelRestaurante['abierto'] ? 'true' : 'false' }}"
+                        aria-label="Local abierto"
+                        data-estado-local
+                        data-url="{{ route('panel.estado-local') }}"
+                        data-abierto="{{ $panelRestaurante['abierto'] ? '1' : '0' }}"
+                        class="estado-local press mt-3 flex h-11 w-full items-center justify-between rounded-control bg-raised px-3 text-sm hover:bg-active/60 lg:h-10"
+                    >
+                        <span class="flex items-center gap-2">
+                            <span class="estado-local-punto size-2.5 rounded-full" aria-hidden="true"></span>
+                            <span class="font-medium text-ink" data-estado-local-texto>{{ $panelRestaurante['abierto'] ? 'Abierto' : 'Cerrado' }}</span>
+                        </span>
+                        <span class="estado-local-pista relative h-5 w-9 rounded-full" aria-hidden="true">
+                            <span class="estado-local-perilla absolute left-0.5 top-0.5 flex size-4 items-center justify-center rounded-full bg-white shadow-sm">
+                                <span class="estado-local-carga hidden size-2.5 animate-spin-fast rounded-full border-[1.5px] border-brand-200 border-t-brand-700"></span>
+                            </span>
+                        </span>
+                    </button>
+                    <p class="mt-1.5 px-1 text-xs text-danger-ink" role="alert" data-estado-local-error hidden></p>
+                @else
+                    <p class="mt-3 flex h-10 items-center gap-2 rounded-control bg-raised px-3 text-sm">
                         <span @class(['size-2.5 rounded-full', 'bg-success-dot' => $panelRestaurante['abierto'], 'bg-neutral-dot' => ! $panelRestaurante['abierto']]) aria-hidden="true"></span>
                         <span class="font-medium text-ink">{{ $panelRestaurante['abierto'] ? 'Abierto' : 'Cerrado' }}</span>
-                    </span>
-                    {{-- Interruptor: verde semántico, atenuado mientras esté deshabilitado --}}
-                    <span
-                        @class(['relative h-5 w-9 rounded-full opacity-60', 'bg-success-fill' => $panelRestaurante['abierto'], 'bg-control' => ! $panelRestaurante['abierto']])
-                        aria-hidden="true"
-                    >
-                        <span @class(['absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow-sm', 'translate-x-4' => $panelRestaurante['abierto']])></span>
-                    </span>
-                </button>
-                <p id="estado-local-ayuda" class="mt-1.5 px-1 text-xs text-muted">Cambiar el estado: disponible en Configuración.</p>
+                    </p>
+                @endif
             @else
                 <div class="flex items-center gap-3">
                     <span class="flex size-10 shrink-0 items-center justify-center rounded-full bg-brand-700 text-sm font-bold text-white" aria-hidden="true">F</span>
@@ -166,10 +173,20 @@
         </nav>
 
         <div class="border-t border-line px-3 py-3">
-            <a href="#" class="press flex h-11 items-center gap-3 rounded-control px-3 text-sm text-neutral-ink hover:bg-raised hover:text-ink lg:h-9">
-                <x-icon name="settings" class="text-faint" />
-                Configuración
-            </a>
+            @if ($panelRestaurante['puedeConfigurar'] ?? false)
+                <a
+                    href="{{ route('panel.configuracion.general') }}"
+                    @if ($navActivo === 'configuracion') aria-current="page" @endif
+                    @class([
+                        'press flex h-11 items-center gap-3 rounded-control px-3 text-sm lg:h-9',
+                        'bg-active font-medium text-brand-900' => $navActivo === 'configuracion',
+                        'text-neutral-ink hover:bg-raised hover:text-ink' => $navActivo !== 'configuracion',
+                    ])
+                >
+                    <x-icon name="settings" @class(['text-brand-700' => $navActivo === 'configuracion', 'text-faint' => $navActivo !== 'configuracion']) />
+                    Configuración
+                </a>
+            @endif
             <a href="#" class="press flex h-11 items-center gap-3 rounded-control px-3 text-sm text-neutral-ink hover:bg-raised hover:text-ink lg:h-9">
                 <x-icon name="help" class="text-faint" />
                 Ayuda
@@ -280,12 +297,14 @@
                             <p class="text-sm font-medium">{{ $panelUsuario['nombre'] }}</p>
                             <p class="text-xs text-muted">{{ $panelUsuario['rol'] }}</p>
                         </div>
-                        <a href="#" class="flex h-10 items-center gap-2.5 rounded-control px-3 text-sm hover:bg-raised">
-                            <x-icon name="user" class="text-faint" /> Mi perfil
+                        <a href="{{ route('panel.mi-cuenta') }}" class="flex h-10 items-center gap-2.5 rounded-control px-3 text-sm hover:bg-raised">
+                            <x-icon name="user" class="text-faint" /> Mi cuenta
                         </a>
-                        <a href="#" class="flex h-10 items-center gap-2.5 rounded-control px-3 text-sm hover:bg-raised">
-                            <x-icon name="settings" class="text-faint" /> Configuración
-                        </a>
+                        @if ($panelRestaurante['puedeConfigurar'] ?? false)
+                            <a href="{{ route('panel.configuracion.general') }}" class="flex h-10 items-center gap-2.5 rounded-control px-3 text-sm hover:bg-raised">
+                                <x-icon name="settings" class="text-faint" /> Configuración
+                            </a>
+                        @endif
                         <div class="my-1 border-t border-rule"></div>
                         <form method="POST" action="{{ route('logout') }}">
                             @csrf
@@ -315,6 +334,22 @@
             @yield('content')
         </main>
     </div>
+
+    @if ($panelRestaurante['puedeCambiarEstado'] ?? false)
+        {{-- Confirmación para cerrar el local (resources/js/estado-local.js) --}}
+        <x-modal id="modal-cerrar-local" title="¿Cerrar el local?" size="sm">
+            <div class="flex flex-col gap-3 text-sm">
+                <p>Tus clientes no podrán hacer pedidos nuevos hasta que lo vuelvas a abrir.</p>
+                <p class="rounded-control bg-raised px-3 py-2.5" data-cerrar-local-activos></p>
+            </div>
+            <x-slot:footer>
+                <x-button variant="secondary" data-modal-close>Seguir abierto</x-button>
+                <x-button variant="primary" data-cerrar-local-confirmar>Cerrar el local</x-button>
+            </x-slot:footer>
+        </x-modal>
+    @endif
+
+    <p class="sr-only" aria-live="polite" data-anuncio-panel></p>
 
     @stack('modals')
 </body>

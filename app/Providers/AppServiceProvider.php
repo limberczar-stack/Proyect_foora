@@ -55,6 +55,27 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
+        // Cambiar la contraseña o cerrar sesiones: 6 intentos por minuto por usuario e IP.
+        RateLimiter::for('cambiar-password', function (Request $request): Limit {
+            $mensaje = 'Hiciste muchos intentos seguidos. Espera un minuto e inténtalo otra vez.';
+
+            return Limit::perMinute(6)
+                ->by(($request->user()?->id ?? 'invitado').'|'.$request->ip())
+                ->response(fn () => $request->expectsJson()
+                    ? response()->json(['message' => $mensaje], 429)
+                    : back()->with('error', $mensaje));
+        });
+
+        // Páginas de error: el personal vuelve al panel; el público, a la portada.
+        View::composer(['errors::*', 'errors.*'], function (ViewContract $view): void {
+            $enPanel = request()->is('panel', 'panel/*');
+
+            $view->with([
+                'inicioUrl' => url($enPanel ? '/panel' : '/'),
+                'inicioTexto' => $enPanel ? 'Ir al inicio del panel' : 'Ir a la portada',
+            ]);
+        });
+
         View::composer('layouts.panel', function (ViewContract $view): void {
             /** @var User|null $user */
             $user = Auth::user();
@@ -79,6 +100,8 @@ class AppServiceProvider extends ServiceProvider
                 'abierto' => $restaurante->estaAbierto(),
                 'iniciales' => $restaurante->iniciales(),
                 'logo' => $restaurante->logoUrl(),
+                'puedeCambiarEstado' => $user->can('cambiarEstado', $restaurante),
+                'puedeConfigurar' => $user->can('configurar', $restaurante),
             ]);
         });
     }

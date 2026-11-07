@@ -171,7 +171,7 @@ function initPedidos() {
 
     function recargarLista() {
         return $.ajax({ url: window.location.href, dataType: 'html', timeout: TIEMPO_MAXIMO_MS }).done((html) => {
-            $('[data-lista]').html(html);
+            $('[data-lista]').html(html).trigger('foora:contenido');
 
             if (urlDetalle) {
                 marcarFila(destinoDetalle().find('[data-detalle]').data('detalle'));
