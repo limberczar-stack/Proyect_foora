@@ -7,6 +7,7 @@ use App\Models\Opcion;
 use App\Models\Producto;
 use App\Models\ProductoVariante;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Collection;
 use Illuminate\Validation\ValidationException;
 
@@ -38,8 +39,65 @@ class CalculadorLineaPedido
      */
     public function calcular(int $productoId, ?int $varianteId, array $opcionIds, int $cantidad): LineaPedidoCalculada
     {
-        $producto = Producto::with('categoria.parent')->find($productoId);
+        return $this->calcularLinea(Producto::with($this->relaciones())->find($productoId), $varianteId, $opcionIds, $cantidad);
+    }
 
+    /**
+     * Calcula un carrito completo de un restaurante, con las mismas consultas para 1 línea o para 30.
+     * Un producto de otro restaurante se trata igual que uno inexistente. Solo suman las líneas válidas.
+     *
+     * @param  list<array{producto_id: int, variante_id: ?int, opciones: array<int, int|string>, cantidad: int}>  $lineas
+     * @return array{lineas: list<array{linea: ?LineaPedidoCalculada, errores: list<string>}>, subtotal: string}
+     */
+    public function calcularCarrito(int $restauranteId, array $lineas): array
+    {
+        $productos = Producto::query()
+            ->withoutGlobalScope(Producto::RESTAURANTE_SCOPE)
+            ->with($this->relaciones())
+            ->where('restaurante_id', $restauranteId)
+            ->whereKey(array_unique(array_column($lineas, 'producto_id')))
+            ->get()
+            ->keyBy('id');
+
+        $resultados = [];
+        $subtotalCentimos = 0;
+
+        foreach ($lineas as $linea) {
+            try {
+                $calculada = $this->calcularLinea($productos->get($linea['producto_id']), $linea['variante_id'], $linea['opciones'], $linea['cantidad']);
+                $subtotalCentimos += $this->aCentimos($calculada->subtotal);
+                $resultados[] = ['linea' => $calculada, 'errores' => []];
+            } catch (ValidationException $e) {
+                $resultados[] = ['linea' => null, 'errores' => Arr::flatten($e->errors())];
+            }
+        }
+
+        return ['lineas' => $resultados, 'subtotal' => $this->aSoles($subtotalCentimos)];
+    }
+
+    /**
+     * Relaciones que necesita el cálculo. No dependen del scope: cada una se compara contra el producto.
+     *
+     * @return array<int|string, mixed>
+     */
+    private function relaciones(): array
+    {
+        $sinScope = fn ($query) => $query->withoutGlobalScope(Producto::RESTAURANTE_SCOPE);
+
+        return [
+            'variantes',
+            'categoria' => fn ($query) => $sinScope($query)->with(['parent' => $sinScope]),
+            'gruposOpcion' => fn ($query) => $sinScope($query)->with('opciones'),
+        ];
+    }
+
+    /**
+     * @param  array<int, int|string>  $opcionIds
+     *
+     * @throws ValidationException
+     */
+    private function calcularLinea(?Producto $producto, ?int $varianteId, array $opcionIds, int $cantidad): LineaPedidoCalculada
+    {
         if (! $producto) {
             throw ValidationException::withMessages(['producto_id' => 'Este producto ya no está en la carta.']);
         }
@@ -129,7 +187,7 @@ class CalculadorLineaPedido
             return [null, ['variante_id' => "Elige una variante de «{$producto->nombre}»."]];
         }
 
-        $variante = ProductoVariante::where('producto_id', $producto->id)->find($varianteId);
+        $variante = $producto->variantes->firstWhere('id', $varianteId);
 
         if (! $variante) {
             return [null, ['variante_id' => "La variante elegida no pertenece a «{$producto->nombre}»."]];
@@ -188,12 +246,9 @@ class CalculadorLineaPedido
      */
     private function gruposVisibles(Producto $producto): Collection
     {
-        $grupos = $producto->gruposOpcion()
-            ->withoutGlobalScope(GrupoOpcion::RESTAURANTE_SCOPE)
-            ->where('grupos_opcion.restaurante_id', $producto->restaurante_id)
-            ->where('grupos_opcion.activo', true)
-            ->with('opciones')
-            ->get();
+        $grupos = $producto->gruposOpcion
+            ->filter(fn (GrupoOpcion $grupo): bool => $grupo->activo && $grupo->restaurante_id === $producto->restaurante_id)
+            ->values();
 
         foreach ($grupos as $grupo) {
             $grupo->opciones->each(fn (Opcion $opcion): Opcion => $opcion->setRelation('grupo', $grupo));

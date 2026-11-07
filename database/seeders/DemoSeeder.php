@@ -5,7 +5,9 @@ namespace Database\Seeders;
 use App\Models\Area;
 use App\Models\CategoriaProducto;
 use App\Models\GrupoOpcion;
+use App\Models\HorarioAtencion;
 use App\Models\Mesa;
+use App\Models\MetodoPago;
 use App\Models\Plan;
 use App\Models\Producto;
 use App\Models\ProductoVariante;
@@ -41,7 +43,12 @@ class DemoSeeder extends Seeder
             'telefono' => '962345678',
             'direccion' => 'Jr. Dos de Mayo 1020',
             'ciudad' => 'Huánuco',
+            'descripcion' => 'Pollo a la brasa a la leña y parrillas, desde 2009.',
             'estado_local' => 'abierto',
+            'visible_en_app' => true,
+            'costo_delivery' => 5.00,
+            'pedido_minimo' => 20.00,
+            'tiempo_prep_min' => 35,
             'activo' => true,
         ]);
 
@@ -52,7 +59,12 @@ class DemoSeeder extends Seeder
             'telefono' => '962876543',
             'direccion' => 'Av. Alameda de la República 455',
             'ciudad' => 'Huánuco',
+            'descripcion' => 'Ceviches y pescados frescos, directo del mercado cada mañana.',
             'estado_local' => 'cerrado',
+            'visible_en_app' => true,
+            'acepta_delivery' => false,
+            'pedido_minimo' => 0,
+            'tiempo_prep_min' => 25,
             'activo' => true,
         ]);
 
@@ -63,7 +75,12 @@ class DemoSeeder extends Seeder
             'telefono' => '962112233',
             'direccion' => 'Jr. Huallayco 840',
             'ciudad' => 'Huánuco',
+            'descripcion' => 'Chifa tradicional al wok, con porciones para compartir.',
             'estado_local' => 'abierto',
+            'visible_en_app' => true,
+            'costo_delivery' => 0,
+            'pedido_minimo' => 25.00,
+            'tiempo_prep_min' => 40,
             'activo' => true,
         ]);
 
@@ -72,6 +89,15 @@ class DemoSeeder extends Seeder
         $this->usuario('cajero@foora.test', 'Miguel Torres', 'cajero', $buenSabor);
         $this->usuario('admin@labahia.test', 'Carla Mendoza', 'admin', $laBahia);
         $this->usuario('admin@chifa.test', 'Andrés Chang', 'admin', $dragonDorado);
+
+        // De lunes a domingo; Dragón Dorado cierra de madrugada, y La Bahía no abre los lunes.
+        $this->horarios($buenSabor, array_fill(1, 7, ['12:00', '22:00']));
+        $this->horarios($laBahia, [1 => null, ...array_fill(2, 6, ['10:00', '16:00'])]);
+        $this->horarios($dragonDorado, array_fill(1, 7, ['11:00', '02:00']));
+
+        $this->metodosPago($buenSabor, ['efectivo', 'yape', 'plin', 'tarjeta']);
+        $this->metodosPago($laBahia, ['efectivo', 'yape']);
+        $this->metodosPago($dragonDorado, ['efectivo', 'yape', 'plin']);
 
         $this->cartaBuenSabor($buenSabor);
         $this->cartaLaBahia($laBahia);
@@ -258,6 +284,29 @@ class DemoSeeder extends Seeder
     {
         $producto->gruposOpcion()->sync(
             collect($grupos)->mapWithKeys(fn (GrupoOpcion $grupo, int $orden): array => [$grupo->id => ['orden' => $orden]]),
+        );
+    }
+
+    /**
+     * @param  array<int, array{0: string, 1: string}|null>  $dias  día (1=lunes … 7=domingo) => [abre, cierra], null si no atiende
+     */
+    private function horarios(Restaurante $restaurante, array $dias): void
+    {
+        foreach ($dias as $dia => $horario) {
+            HorarioAtencion::updateOrCreate(
+                ['restaurante_id' => $restaurante->id, 'dia_semana' => $dia],
+                ['abre' => $horario[0] ?? null, 'cierra' => $horario[1] ?? null, 'cerrado' => $horario === null],
+            );
+        }
+    }
+
+    /**
+     * @param  list<string>  $codigos
+     */
+    private function metodosPago(Restaurante $restaurante, array $codigos): void
+    {
+        $restaurante->metodosPago()->sync(
+            MetodoPago::whereIn('codigo', $codigos)->pluck('id')->mapWithKeys(fn (int $id): array => [$id => ['activo' => true]]),
         );
     }
 

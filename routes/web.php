@@ -4,7 +4,14 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Panel\CategoriaController;
 use App\Http\Controllers\Panel\GrupoOpcionController;
 use App\Http\Controllers\Panel\ProductoController;
+use App\Http\Controllers\VitrinaController;
+use App\Support\SlugsReservados;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
+use Illuminate\Cookie\Middleware\EncryptCookies;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
 
 Route::get('/', function () {
     return view('welcome');
@@ -49,4 +56,22 @@ Route::middleware(['auth', 'panel'])->prefix('panel')->name('panel.')->group(fun
         Route::patch('categorias/{categoria}/estado', [CategoriaController::class, 'estado'])->name('categorias.estado');
         Route::patch('categorias/{categoria}/mover', [CategoriaController::class, 'mover'])->name('categorias.mover');
     });
+});
+
+/*
+ * Vitrina pública. Debe seguir siendo lo último de este archivo: /{slug} es genérica.
+ * Va sin sesión, cookies ni CSRF: cada visita desde WhatsApp crearía una fila en sessions, una
+ * página abierta por horas daría 419, y validar el carrito no escribe nada.
+ */
+Route::withoutMiddleware([
+    EncryptCookies::class,
+    AddQueuedCookiesToResponse::class,
+    StartSession::class,
+    ShareErrorsFromSession::class,
+    PreventRequestForgery::class,
+])->where(['slug' => SlugsReservados::patronRuta()])->group(function () {
+    Route::get('/{slug}', [VitrinaController::class, 'show'])->name('vitrina.show');
+    Route::post('/{slug}/carrito/validar', [VitrinaController::class, 'validarCarrito'])
+        ->middleware('throttle:60,1')
+        ->name('vitrina.carrito.validar');
 });

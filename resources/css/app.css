@@ -200,6 +200,91 @@
         }
     }
 
+    /* Vitrina: la hoja sube desde abajo en celular; desde sm es un modal normal */
+    @media (max-width: 639px) {
+        .modal.hoja {
+            opacity: 1;
+            transform: translateY(100%);
+            transition:
+                transform 220ms var(--ease-drawer),
+                overlay 220ms allow-discrete,
+                display 220ms allow-discrete;
+        }
+
+        .modal.hoja[open] {
+            transform: translateY(0);
+            transition-duration: 320ms;
+
+            @starting-style {
+                transform: translateY(100%);
+            }
+        }
+    }
+
+    /* Vitrina: barra del carrito, aparece desde abajo al agregar el primer producto */
+    .vitrina-barra {
+        transition: transform 240ms var(--ease-out);
+
+        @starting-style {
+            transform: translateY(100%);
+        }
+    }
+
+    .vitrina-chips {
+        scrollbar-width: none;
+
+        &::-webkit-scrollbar {
+            display: none;
+        }
+    }
+
+    .vitrina-chip {
+        display: inline-flex;
+        align-items: center;
+        height: 2.5rem;
+        padding-inline: 0.875rem;
+        border-radius: 9999px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-line);
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-ink);
+        white-space: nowrap;
+
+        &[aria-current] {
+            background: var(--color-brand-700);
+            border-color: var(--color-brand-700);
+            color: #fff;
+        }
+    }
+
+    .vitrina-paso {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: var(--radius-control);
+        border: 1px solid var(--color-control);
+        background: var(--color-surface);
+        font-size: 1.125rem;
+        line-height: 1;
+        color: var(--color-ink);
+        cursor: pointer;
+
+        &:disabled {
+            color: var(--color-faint);
+            background: var(--color-raised);
+            cursor: not-allowed;
+        }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+        .vitrina-tarjeta:hover {
+            border-color: var(--color-brand-300);
+        }
+    }
+
     /* Panel lateral móvil */
     .sidebar {
         transition:
@@ -302,6 +387,17 @@
 
     .sidebar {
         transition-duration: 0.01ms;
+    }
+
+    .modal.hoja,
+    .modal.hoja[open],
+    .vitrina-barra {
+        transform: none;
+        transition: opacity 150ms ease;
+
+        @starting-style {
+            transform: none;
+        }
     }
 
     .skeleton {

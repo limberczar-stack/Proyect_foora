@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Database\Factories\RestauranteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -81,6 +82,45 @@ class Restaurante extends Model
     public function estaAbierto(): bool
     {
         return $this->estado_local === 'abierto';
+    }
+
+    /**
+     * Abierto de verdad en este momento: el local no se cerró a mano y está dentro de su horario,
+     * en su zona horaria. Sin horarios registrados manda solo estado_local.
+     *
+     * Quien lo llame sin sesión o desde otro restaurante debe cargar antes horariosAtencion sin scope.
+     */
+    public function abiertoAhora(?CarbonInterface $momento = null): bool
+    {
+        if (! $this->estaAbierto()) {
+            return false;
+        }
+
+        if ($this->horariosAtencion->isEmpty()) {
+            return true;
+        }
+
+        $ahora = ($momento ?? now())->copy()->setTimezone($this->zona_horaria);
+        $hora = $ahora->format('H:i');
+        $hoy = $this->horariosAtencion->firstWhere('dia_semana', $ahora->dayOfWeekIso);
+        $ayer = $this->horariosAtencion->firstWhere('dia_semana', $ahora->dayOfWeekIso === 1 ? 7 : $ahora->dayOfWeekIso - 1);
+
+        return (bool) ($hoy?->cubre($hora) || $ayer?->cubreMadrugadaSiguiente($hora));
+    }
+
+    /**
+     * El horario de hoy en palabras, o null si no tiene horarios registrados.
+     */
+    public function horarioDeHoyTexto(?CarbonInterface $momento = null): ?string
+    {
+        if ($this->horariosAtencion->isEmpty()) {
+            return null;
+        }
+
+        $dia = ($momento ?? now())->copy()->setTimezone($this->zona_horaria)->dayOfWeekIso;
+        $hoy = $this->horariosAtencion->firstWhere('dia_semana', $dia);
+
+        return $hoy?->atiende() ? 'Hoy atiende de '.$hoy->rangoTexto() : 'Hoy no atiende';
     }
 
     public function iniciales(): string
