@@ -2,12 +2,17 @@
 
 namespace Database\Seeders;
 
+use App\Models\Alerta;
 use App\Models\Area;
 use App\Models\CategoriaProducto;
 use App\Models\GrupoOpcion;
 use App\Models\HorarioAtencion;
 use App\Models\Mesa;
 use App\Models\MetodoPago;
+use App\Models\Pedido;
+use App\Models\PedidoHistorial;
+use App\Models\PedidoItem;
+use App\Models\PedidoItemOpcion;
 use App\Models\Plan;
 use App\Models\Producto;
 use App\Models\ProductoVariante;
@@ -15,6 +20,8 @@ use App\Models\Restaurante;
 use App\Models\Rubro;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Datos de demostración: tres restaurantes con sus usuarios, mesas y carta, para probar
@@ -86,10 +93,11 @@ class DemoSeeder extends Seeder
         ]);
 
         $this->usuario('superadmin@foora.test', 'Equipo FOORA', 'superadmin', null);
-        $this->usuario('admin@foora.test', 'Rosa Quispe', 'admin', $buenSabor);
+        $adminBuenSabor = $this->usuario('admin@foora.test', 'Rosa Quispe', 'admin', $buenSabor);
         $this->usuario('cajero@foora.test', 'Miguel Torres', 'cajero', $buenSabor);
-        $this->usuario('admin@labahia.test', 'Carla Mendoza', 'admin', $laBahia);
-        $this->usuario('admin@chifa.test', 'Andrés Chang', 'admin', $dragonDorado);
+        $this->usuario('cocina@foora.test', 'Carmen Flores', 'cocina', $buenSabor);
+        $adminLaBahia = $this->usuario('admin@labahia.test', 'Carla Mendoza', 'admin', $laBahia);
+        $adminDragon = $this->usuario('admin@chifa.test', 'Andrés Chang', 'admin', $dragonDorado);
 
         // De lunes a domingo; Dragón Dorado cierra de madrugada, y La Bahía no abre los lunes.
         $this->horarios($buenSabor, array_fill(1, 7, ['12:00', '22:00']));
@@ -104,6 +112,10 @@ class DemoSeeder extends Seeder
         $this->cartaLaBahia($laBahia);
         $this->cartaDragonDorado($dragonDorado);
 
+        $this->pedidos($buenSabor, $adminBuenSabor);
+        $this->pedidos($laBahia, $adminLaBahia);
+        $this->pedidos($dragonDorado, $adminDragon);
+
         $this->mesas($buenSabor, [
             'Salón principal' => ['M1' => 4, 'M2' => 2, 'M3' => 4, 'M4' => 4, 'M5' => 2, 'M6' => 6, 'M7' => 6, 'M8' => 4, 'M9' => 4, 'M10' => 8],
             'Terraza' => ['T1' => 2, 'T2' => 2, 'T3' => 4, 'T4' => 4, 'T5' => 4, 'T6' => 2],
@@ -117,7 +129,7 @@ class DemoSeeder extends Seeder
             'Salón' => ['D1' => 4, 'D2' => 4, 'D3' => 6, 'D4' => 8, 'D5' => 2],
         ]);
 
-        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, admin@labahia.test, admin@chifa.test (contraseña: password).');
+        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, cocina@foora.test, admin@labahia.test, admin@chifa.test (contraseña: password).');
     }
 
     /**
@@ -313,6 +325,163 @@ class DemoSeeder extends Seeder
                 'titular' => $metodo->requiere_validacion ? $titular : null,
             ]]),
         );
+    }
+
+    /**
+     * Pedidos de ejemplo en todos los estados, para ver el panel completo. Se recrean en cada
+     * ejecución, con números desde 1.
+     */
+    private function pedidos(Restaurante $restaurante, User $responsable): void
+    {
+        Alerta::withoutGlobalScopes()->where('restaurante_id', $restaurante->id)->where('referencia_tipo', 'pedido')->delete();
+        Pedido::withoutGlobalScopes()->where('restaurante_id', $restaurante->id)->delete();
+
+        $productos = Producto::withoutGlobalScopes()
+            ->where('restaurante_id', $restaurante->id)
+            ->where('disponible', true)
+            ->with(['variantes', 'gruposOpcion.opciones'])
+            ->orderBy('id')
+            ->get()
+            ->values();
+        $metodos = $restaurante->metodosPago()->get()->keyBy('codigo');
+        $tipoEntrega = $restaurante->acepta_delivery ? 'delivery' : 'recojo';
+
+        // [estado, tipo, método, minutos desde que llegó, cliente, nota de cocina]
+        $escenarios = [
+            ['nuevo', $tipoEntrega, 'yape', 3, 'Lucía Paredes', null],
+            ['nuevo', 'recojo', 'efectivo', 6, 'Jorge Ramírez', 'Sin cremas'],
+            ['nuevo', $tipoEntrega, 'efectivo', 9, 'María Salazar', null],
+            ['en_preparacion', $tipoEntrega, 'efectivo', 15, 'Pedro Huamán', 'Bien cocido'],
+            ['en_preparacion', 'recojo', 'yape', 22, 'Ana Chávez', null],
+            ['en_preparacion', $tipoEntrega, 'efectivo', 26, 'Luis Vargas', null],
+            ['listo', 'recojo', 'efectivo', 34, 'Rosa Espinoza', null],
+            ['listo', $tipoEntrega, 'yape', 38, 'Carlos Rojas', 'Mucho ají aparte'],
+            ['en_camino', $tipoEntrega, 'efectivo', 45, 'Sofía Mendoza', null],
+            ['entregado', 'recojo', 'efectivo', 90, 'Diego Torres', null],
+            ['entregado', $tipoEntrega, 'yape', 120, 'Valeria Cruz', null],
+            ['cancelado', $tipoEntrega, 'efectivo', 60, 'Miguel Ponce', null],
+        ];
+
+        foreach ($escenarios as $indice => [$estado, $tipo, $codigoMetodo, $minutos, $cliente, $nota]) {
+            $metodo = $metodos->get($codigoMetodo) ?? $metodos->get('efectivo');
+            $this->pedido($restaurante, $responsable, $indice + 1, $estado, $tipo, $metodo, $minutos, $cliente, $nota, $productos);
+        }
+    }
+
+    /**
+     * @param  Collection<int, Producto>  $productos
+     */
+    private function pedido(Restaurante $restaurante, User $responsable, int $numero, string $estado, string $tipo, MetodoPago $metodo, int $minutos, string $cliente, ?string $nota, $productos): void
+    {
+        $llegada = now()->subMinutes($minutos);
+        $enMinutos = fn (int $m) => $llegada->copy()->addMinutes($m);
+        $esDelivery = $tipo === 'delivery';
+        $porVerificar = $metodo->requiere_validacion;
+
+        $lineas = [];
+        foreach ([$productos[($numero * 2) % $productos->count()], $productos[($numero * 3 + 1) % $productos->count()]] as $orden => $producto) {
+            $variante = $producto->variantes->first();
+            $opciones = $producto->gruposOpcion->where('obligatorio', true)->map(fn (GrupoOpcion $grupo) => [$grupo, $grupo->opciones->first()])->filter(fn (array $par) => $par[1] !== null)->values();
+            $unitario = (float) ($variante?->precio ?? $producto->precio) + $opciones->sum(fn (array $par) => (float) $par[1]->precio_extra);
+            $cantidad = $orden === 0 ? 1 + $numero % 2 : 1;
+            $lineas[] = compact('producto', 'variante', 'opciones', 'unitario', 'cantidad');
+        }
+
+        $subtotal = array_sum(array_map(fn (array $l) => $l['unitario'] * $l['cantidad'], $lineas));
+        $delivery = $esDelivery ? (float) $restaurante->costo_delivery : 0.0;
+        $estadoPago = match (true) {
+            $estado === 'entregado' => 'pagado',
+            $porVerificar && in_array($estado, ['en_preparacion', 'listo', 'en_camino'], true) => 'pagado',
+            $porVerificar && $estado === 'nuevo' => 'por_verificar',
+            default => 'pendiente',
+        };
+
+        $pedido = new Pedido;
+        $pedido->forceFill([
+            'restaurante_id' => $restaurante->id,
+            'numero' => $numero,
+            'codigo_seguimiento' => Str::random(Pedido::LONGITUD_CODIGO),
+            'nombre_cliente' => $cliente,
+            'telefono_cliente' => '9'.str_pad((string) (70000000 + $restaurante->id * 1000 + $numero), 8, '0', STR_PAD_LEFT),
+            'tipo' => $tipo,
+            'origen' => 'app',
+            'direccion_entrega' => $esDelivery ? 'Jr. Huánuco '.(100 + $numero * 7) : null,
+            'referencia_entrega' => $esDelivery ? 'Frente al parque, puerta verde' : null,
+            'metodo_pago_id' => $metodo->id,
+            'estado_pago' => $estadoPago,
+            'referencia_pago' => $porVerificar ? 'OP'.(482000 + $numero) : null,
+            'pago_validado_por' => $estadoPago === 'pagado' ? $responsable->id : null,
+            'pago_validado_at' => $estadoPago === 'pagado' ? $enMinutos(2) : null,
+            'subtotal' => $subtotal,
+            'costo_delivery' => $delivery,
+            'total' => $subtotal + $delivery,
+            'estado' => $estado,
+            'tiempo_estimado_min' => $restaurante->tiempo_prep_min,
+            'aceptado_at' => in_array($estado, ['nuevo', 'cancelado'], true) ? null : $enMinutos(3),
+            'listo_at' => in_array($estado, ['listo', 'en_camino', 'entregado'], true) ? $enMinutos(18) : null,
+            'recoger_antes_de' => $tipo === 'recojo' && in_array($estado, ['listo', 'entregado'], true) ? $enMinutos(18 + Pedido::MINUTOS_PARA_RECOGER) : null,
+            'salida_at' => $esDelivery && in_array($estado, ['en_camino', 'entregado'], true) ? $enMinutos(20) : null,
+            'eta_at' => $esDelivery && in_array($estado, ['en_camino', 'entregado'], true) ? $enMinutos(40) : null,
+            'entregado_at' => $estado === 'entregado' ? $enMinutos(35) : null,
+            'cancelado_at' => $estado === 'cancelado' ? $enMinutos(5) : null,
+            'cancelacion_motivo' => $estado === 'cancelado' ? 'cliente_no_respondio' : null,
+            'consentimiento_at' => $llegada,
+            'consentimiento_version' => Pedido::CONSENTIMIENTO_VERSION,
+            'created_at' => $llegada,
+            'updated_at' => $llegada,
+        ])->save();
+
+        foreach ($lineas as $orden => $linea) {
+            $item = PedidoItem::create([
+                'pedido_id' => $pedido->id,
+                'producto_id' => $linea['producto']->id,
+                'variante_id' => $linea['variante']?->id,
+                'variante_nombre' => $linea['variante']?->nombre,
+                'nombre' => $linea['producto']->nombre,
+                'cantidad' => $linea['cantidad'],
+                'precio_unitario' => $linea['unitario'],
+                'subtotal' => $linea['unitario'] * $linea['cantidad'],
+                'observacion' => $orden === 0 ? $nota : null,
+            ]);
+
+            foreach ($linea['opciones'] as [$grupo, $opcion]) {
+                PedidoItemOpcion::create(['pedido_item_id' => $item->id, 'opcion_id' => $opcion->id, 'grupo_nombre' => $grupo->nombre, 'nombre' => $opcion->nombre, 'precio_extra' => $opcion->precio_extra]);
+            }
+        }
+
+        $camino = match ($estado) {
+            'nuevo' => ['nuevo'],
+            'en_preparacion' => ['nuevo', 'en_preparacion'],
+            'listo' => ['nuevo', 'en_preparacion', 'listo'],
+            'en_camino' => ['nuevo', 'en_preparacion', 'listo', 'en_camino'],
+            'entregado' => $esDelivery ? ['nuevo', 'en_preparacion', 'listo', 'en_camino', 'entregado'] : ['nuevo', 'en_preparacion', 'listo', 'entregado'],
+            default => ['nuevo', 'cancelado'],
+        };
+        $momentos = ['nuevo' => 0, 'en_preparacion' => 3, 'listo' => 18, 'en_camino' => 20, 'entregado' => 35, 'cancelado' => 5];
+
+        foreach ($camino as $paso => $estadoPaso) {
+            $registro = new PedidoHistorial;
+            $registro->forceFill([
+                'pedido_id' => $pedido->id,
+                'estado_anterior' => $paso === 0 ? null : $camino[$paso - 1],
+                'estado_nuevo' => $estadoPaso,
+                'user_id' => $paso === 0 ? null : $responsable->id,
+                'nota' => match ($estadoPaso) {
+                    'nuevo' => 'Pedido recibido desde la vitrina.',
+                    'cancelado' => 'Motivo: '.Pedido::MOTIVOS_CANCELACION['cliente_no_respondio'].'.',
+                    default => null,
+                },
+                'created_at' => $enMinutos($momentos[$estadoPaso]),
+            ])->save();
+        }
+
+        if ($estadoPago === 'por_verificar') {
+            Alerta::create(['restaurante_id' => $restaurante->id, 'tipo' => 'pago_pendiente', 'prioridad' => 'urgente', 'titulo' => "Pago por validar: pedido #{$numero}", 'mensaje' => "{$metodo->nombre} por S/ ".number_format($subtotal + $delivery, 2).'.', 'referencia_tipo' => 'pedido', 'referencia_id' => $pedido->id]);
+        }
+
+        if ($estado === 'nuevo') {
+            Alerta::create(['restaurante_id' => $restaurante->id, 'tipo' => 'pedido_nuevo', 'prioridad' => 'media', 'titulo' => "Nuevo pedido #{$numero}", 'mensaje' => 'Total S/ '.number_format($subtotal + $delivery, 2).'.', 'referencia_tipo' => 'pedido', 'referencia_id' => $pedido->id]);
+        }
     }
 
     private function usuario(string $email, string $nombre, string $rol, ?Restaurante $restaurante): User

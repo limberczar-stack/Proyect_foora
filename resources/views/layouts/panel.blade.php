@@ -19,12 +19,13 @@
     $navCounts ??= [];
     $alertasRecientes ??= [];
     $navActivo ??= 'inicio';
+    $navPedidosNuevos ??= null;
 
     /** @var list<array{grupo: string, items: list<array{clave: string, label: string, icon: string, href: string, count?: int, countLabel?: string}>}> $menu */
     $menu = [
         ['grupo' => 'Operación', 'items' => [
             ['clave' => 'inicio', 'label' => 'Inicio', 'icon' => 'home', 'href' => route('panel.inicio')],
-            ['clave' => 'pedidos', 'label' => 'Pedidos', 'icon' => 'receipt', 'href' => '#', 'count' => $navCounts['pedidos'] ?? 0, 'countLabel' => 'pedidos nuevos'],
+            ['clave' => 'pedidos', 'label' => 'Pedidos', 'icon' => 'receipt', 'href' => route('panel.pedidos.index'), 'count' => $navPedidosNuevos ?? ($navCounts['pedidos'] ?? 0), 'countLabel' => 'pedidos nuevos', 'vivo' => true],
             ['clave' => 'alertas', 'label' => 'Alertas', 'icon' => 'bell', 'href' => '#', 'count' => $navCounts['alertas'] ?? 0, 'countLabel' => 'alertas sin resolver'],
             ['clave' => 'reservas', 'label' => 'Reservas', 'icon' => 'calendar', 'href' => '#', 'count' => $navCounts['reservas'] ?? 0, 'countLabel' => 'reservas por confirmar'],
             ['clave' => 'mesas', 'label' => 'Mesas', 'icon' => 'table', 'href' => '#'],
@@ -148,9 +149,13 @@
                             >
                                 <x-icon :name="$item['icon']" @class(['text-brand-700' => $esActivo, 'text-faint' => ! $esActivo]) />
                                 <span class="flex-1">{{ $item['label'] }}</span>
-                                @if (! empty($item['count']))
-                                    <span class="num inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1.5 text-xs font-semibold text-white">
-                                        {{ $item['count'] }}<span class="sr-only"> {{ $item['countLabel'] }}</span>
+                                @if (! empty($item['count']) || ! empty($item['vivo']))
+                                    <span
+                                        @if (! empty($item['vivo'])) data-nav-badge="{{ $item['clave'] }}" @endif
+                                        @if (empty($item['count'])) hidden @endif
+                                        class="num inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-700 px-1.5 text-xs font-semibold text-white"
+                                    >
+                                        <span data-nav-badge-numero>{{ $item['count'] ?? 0 }}</span><span class="sr-only"> {{ $item['countLabel'] }}</span>
                                     </span>
                                 @endif
                             </a>

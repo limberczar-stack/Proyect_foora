@@ -66,6 +66,12 @@ class AppServiceProvider extends ServiceProvider
                 'iniciales' => $user->iniciales(),
             ]);
 
+            // Badge del menú: pedidos que esperan ser aceptados.
+            $view->with('navPedidosNuevos', $restaurante === null ? null : Pedido::query()
+                ->where('restaurante_id', $restaurante->id)
+                ->where('estado', 'nuevo')
+                ->count());
+
             $view->with('panelRestaurante', $restaurante === null ? null : [
                 'nombre' => $restaurante->nombre,
                 'ciudad' => $restaurante->ciudad,

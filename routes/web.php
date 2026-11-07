@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Panel\CategoriaController;
 use App\Http\Controllers\Panel\GrupoOpcionController;
+use App\Http\Controllers\Panel\PedidoController;
 use App\Http\Controllers\Panel\ProductoController;
 use App\Http\Controllers\PedidoPublicoController;
 use App\Http\Controllers\VitrinaController;
@@ -29,6 +30,13 @@ Route::post('/logout', [LoginController::class, 'destroy'])
 
 Route::middleware(['auth', 'panel'])->prefix('panel')->name('panel.')->group(function () {
     Route::view('/', 'panel.inicio')->name('inicio');
+
+    // Pedidos: los permisos por rol viven en PedidoPolicy.
+    Route::get('pedidos', [PedidoController::class, 'index'])->name('pedidos.index');
+    Route::get('pedidos/novedades', [PedidoController::class, 'novedades'])->name('pedidos.novedades');
+    Route::get('pedidos/{pedido}', [PedidoController::class, 'show'])->whereNumber('pedido')->name('pedidos.show');
+    Route::patch('pedidos/{pedido}/estado', [PedidoController::class, 'estado'])->whereNumber('pedido')->name('pedidos.estado');
+    Route::patch('pedidos/{pedido}/pago', [PedidoController::class, 'pago'])->whereNumber('pedido')->name('pedidos.pago');
 
     // Carta: los permisos por rol viven en ProductoPolicy, CategoriaProductoPolicy y GrupoOpcionPolicy.
     Route::prefix('carta')->name('carta.')->group(function () {

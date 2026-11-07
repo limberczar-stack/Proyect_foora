@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\WhatsApp;
 use Carbon\CarbonInterface;
 use Database\Factories\RestauranteFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -143,13 +144,7 @@ class Restaurante extends Model
      */
     public function whatsappUrl(string $mensaje): ?string
     {
-        $digitos = preg_replace('/[^0-9]/', '', (string) $this->telefono);
-
-        if (strlen($digitos) === 9) {
-            $digitos = '51'.$digitos;
-        }
-
-        return strlen($digitos) === 11 ? "https://wa.me/{$digitos}?text=".rawurlencode($mensaje) : null;
+        return WhatsApp::enlace($this->telefono, $mensaje);
     }
 
     public function iniciales(): string
