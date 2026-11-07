@@ -42,8 +42,8 @@
                 <span class="num text-lg font-bold" data-carrito-subtotal></span>
             </div>
             <p class="mb-3 text-xs text-muted">Sin incluir el costo de delivery.</p>
-            <button type="button" disabled class="flex h-12 w-full cursor-not-allowed items-center justify-center rounded-control bg-brand-200 px-4 text-[0.9375rem] font-semibold text-brand-900">Continuar con el pedido</button>
-            <p class="mt-1.5 text-center text-xs text-muted">Disponible pronto</p>
+            <button type="button" disabled data-carrito-continuar class="press flex h-12 w-full cursor-pointer items-center justify-center rounded-control bg-brand-700 px-4 text-[0.9375rem] font-semibold text-white hover:bg-brand-800 disabled:cursor-not-allowed disabled:bg-brand-200 disabled:text-brand-900">Continuar con el pedido</button>
+            <p class="mt-1.5 text-center text-xs text-muted" data-carrito-nota hidden></p>
         </footer>
     </div>
 </dialog>

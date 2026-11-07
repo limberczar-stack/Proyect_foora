@@ -81,6 +81,7 @@ class DemoSeeder extends Seeder
             'costo_delivery' => 0,
             'pedido_minimo' => 25.00,
             'tiempo_prep_min' => 40,
+            'acepta_pedidos_auto' => true,
             'activo' => true,
         ]);
 
@@ -95,9 +96,9 @@ class DemoSeeder extends Seeder
         $this->horarios($laBahia, [1 => null, ...array_fill(2, 6, ['10:00', '16:00'])]);
         $this->horarios($dragonDorado, array_fill(1, 7, ['11:00', '02:00']));
 
-        $this->metodosPago($buenSabor, ['efectivo', 'yape', 'plin', 'tarjeta']);
-        $this->metodosPago($laBahia, ['efectivo', 'yape']);
-        $this->metodosPago($dragonDorado, ['efectivo', 'yape', 'plin']);
+        $this->metodosPago($buenSabor, ['efectivo', 'yape', 'plin', 'tarjeta'], '962345678', 'Rosa Quispe');
+        $this->metodosPago($laBahia, ['efectivo', 'yape'], '962876543', 'Carla Mendoza');
+        $this->metodosPago($dragonDorado, ['efectivo', 'yape', 'plin'], '962112233', 'Andrés Chang');
 
         $this->cartaBuenSabor($buenSabor);
         $this->cartaLaBahia($laBahia);
@@ -303,10 +304,14 @@ class DemoSeeder extends Seeder
     /**
      * @param  list<string>  $codigos
      */
-    private function metodosPago(Restaurante $restaurante, array $codigos): void
+    private function metodosPago(Restaurante $restaurante, array $codigos, string $numeroCuenta, string $titular): void
     {
         $restaurante->metodosPago()->sync(
-            MetodoPago::whereIn('codigo', $codigos)->pluck('id')->mapWithKeys(fn (int $id): array => [$id => ['activo' => true]]),
+            MetodoPago::whereIn('codigo', $codigos)->get()->mapWithKeys(fn (MetodoPago $metodo): array => [$metodo->id => [
+                'activo' => true,
+                'numero_cuenta' => $metodo->requiere_validacion ? $numeroCuenta : null,
+                'titular' => $metodo->requiere_validacion ? $titular : null,
+            ]]),
         );
     }
 

@@ -13,7 +13,7 @@
         155,
     );
     $horarioDeHoy = $restaurante->horarioDeHoyTexto();
-    $metodosPago = $restaurante->metodosPago->pluck('nombre')->implode(', ');
+    $metodosPago = $restaurante->metodosPagoDisponibles()->pluck('nombre')->implode(', ');
     $ubicacion = collect([$restaurante->direccion, $restaurante->ciudad])->filter()->implode(', ');
 @endphp
 
@@ -94,6 +94,11 @@
     </div>
 
     <main class="mx-auto max-w-5xl px-4 pb-32 sm:px-6">
+        <a href="#" class="press mt-4 flex items-center justify-between gap-3 rounded-control bg-brand-100 px-4 py-3 text-sm font-semibold text-brand-800" data-mi-pedido hidden>
+            Ver mi pedido
+            <x-icon name="chevron-right" />
+        </a>
+
         @unless ($abierto)
             <div class="mt-4 flex items-start gap-2.5 rounded-control bg-warning-bg px-4 py-3 text-sm text-warning-ink" role="status">
                 <x-icon name="clock" class="mt-0.5" />
@@ -169,4 +174,5 @@
 @push('modals')
     @include('vitrina._hoja_producto')
     @include('vitrina._hoja_carrito', ['abierto' => $abierto])
+    @include('vitrina._hoja_finalizar', ['restaurante' => $restaurante])
 @endpush

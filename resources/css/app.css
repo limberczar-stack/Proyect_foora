@@ -285,6 +285,61 @@
         }
     }
 
+    /* Seguimiento: línea de tiempo del pedido */
+    .seguimiento-paso {
+        position: relative;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        min-height: 2.5rem;
+    }
+
+    .seguimiento-paso:not(:last-child)::before {
+        content: '';
+        position: absolute;
+        left: 0.4375rem;
+        top: 1.75rem;
+        bottom: -0.25rem;
+        width: 2px;
+        background: var(--color-line);
+    }
+
+    .seguimiento-paso[data-estado='hecho']:not(:last-child)::before {
+        background: var(--color-success-dot);
+    }
+
+    .seguimiento-punto {
+        width: 1rem;
+        height: 1rem;
+        flex-shrink: 0;
+        border-radius: 9999px;
+        background: var(--color-control);
+        transition: background-color 200ms ease;
+    }
+
+    .seguimiento-texto {
+        font-size: 0.875rem;
+        color: var(--color-muted);
+    }
+
+    [data-estado='hecho'] > .seguimiento-punto {
+        background: var(--color-success-dot);
+    }
+
+    [data-estado='actual'] > .seguimiento-punto {
+        background: var(--color-brand-700);
+        box-shadow: 0 0 0 4px var(--color-brand-100);
+    }
+
+    [data-estado='actual'] > .seguimiento-texto {
+        font-weight: 600;
+        color: var(--color-ink);
+    }
+
+    [data-estado='hecho'] > .seguimiento-texto {
+        color: var(--color-ink);
+    }
+
     /* Panel lateral móvil */
     .sidebar {
         transition:

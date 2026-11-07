@@ -7,7 +7,7 @@
     <title>@yield('title') · FOORA</title>
     @stack('meta')
     @fonts
-    @vite(['resources/css/app.css', 'resources/js/vitrina.js'])
+    @vite(['resources/css/app.css', $entrada ?? 'resources/js/vitrina.js'])
 </head>
 <body class="min-h-dvh">
     @yield('content')

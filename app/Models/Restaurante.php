@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Collection;
 
 class Restaurante extends Model
 {
@@ -121,6 +122,34 @@ class Restaurante extends Model
         $hoy = $this->horariosAtencion->firstWhere('dia_semana', $dia);
 
         return $hoy?->atiende() ? 'Hoy atiende de '.$hoy->rangoTexto() : 'Hoy no atiende';
+    }
+
+    /**
+     * Métodos activos que el cliente puede usar. Yape o Plin sin número no se ofrecen:
+     * no tendría a dónde pagar. Requiere metodosPago cargado.
+     *
+     * @return Collection<int, MetodoPago>
+     */
+    public function metodosPagoDisponibles(): Collection
+    {
+        return $this->metodosPago
+            ->filter(fn (MetodoPago $metodo): bool => (bool) $metodo->pivot->activo && (! $metodo->requiere_validacion || filled($metodo->pivot->numero_cuenta)))
+            ->values()
+            ->toBase();
+    }
+
+    /**
+     * Enlace de WhatsApp al local con el mensaje listo, o null si no tiene un celular válido.
+     */
+    public function whatsappUrl(string $mensaje): ?string
+    {
+        $digitos = preg_replace('/[^0-9]/', '', (string) $this->telefono);
+
+        if (strlen($digitos) === 9) {
+            $digitos = '51'.$digitos;
+        }
+
+        return strlen($digitos) === 11 ? "https://wa.me/{$digitos}?text=".rawurlencode($mensaje) : null;
     }
 
     public function iniciales(): string

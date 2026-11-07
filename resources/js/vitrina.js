@@ -6,6 +6,7 @@
  * - Detalle de producto: variante, grupos de opciones, cantidad, observaciones y total en vivo.
  * - Carrito: se guarda en localStorage solo con ids, cantidades y observaciones. Los precios del
  *   carrito siempre vienen del servidor.
+ * - Finalizar pedido: datos, método de pago y envío. El servidor recalcula todo.
  *
  * Los nombres y descripciones los escribe cada restaurante: todo dato se pinta con .text() o
  * .val(), nunca con .html() ni concatenado en una plantilla.
@@ -20,6 +21,8 @@ const OBSERVACION_MAXIMA = 200;
 const CLAVE_CARRITO = `foora.carrito.v1.${datos.slug}`;
 const VELOCIDAD_CIERRE = 0.11;
 const ESPERA_CONFIRMAR_VACIAR_MS = 3000;
+const TIEMPO_MAXIMO_PEDIDO_MS = 20000;
+const CLAVE_MI_PEDIDO = `foora.pedido.v1.${datos.slug}`;
 
 const aCentimos = (monto) => Math.round(Number(monto) * 100);
 const ESPACIO_FIJO = String.fromCharCode(160);
@@ -217,16 +220,16 @@ function initArrastre(asa) {
 
 /** localStorage puede no existir o lanzar error (modo privado, bloqueado): se sigue en memoria. */
 const almacen = {
-    leer() {
+    leer(clave = CLAVE_CARRITO) {
         try {
-            return window.localStorage.getItem(CLAVE_CARRITO);
+            return window.localStorage.getItem(clave);
         } catch {
             return null;
         }
     },
-    escribir(valor) {
+    escribir(valor, clave = CLAVE_CARRITO) {
         try {
-            window.localStorage.setItem(CLAVE_CARRITO, valor);
+            window.localStorage.setItem(clave, valor);
         } catch {
             // Sin almacenamiento el carrito dura lo que dure la página.
         }
@@ -429,6 +432,31 @@ function pintarLinea(linea, indice) {
 
 const ATRIBUTOS_LINEA = ['data-linea-menos', 'data-linea-mas', 'data-linea-quitar'];
 
+/** Por qué todavía no se puede continuar. Vacío si no hay impedimento. */
+function notaContinuar() {
+    if (!datos.aceptaPedidos) {
+        return 'Este local no recibe pedidos por ahora.';
+    }
+
+    if (!datos.abierto) {
+        return 'Podrás hacer tu pedido cuando el local abra.';
+    }
+
+    if (carrito.estado !== 'listo') {
+        return '';
+    }
+
+    if (carrito.respuesta.lineas.some((linea) => !linea.valida)) {
+        return 'Corrige o quita los productos marcados para continuar.';
+    }
+
+    if (aCentimos(carrito.respuesta.subtotal) < aCentimos(datos.pedidoMinimo)) {
+        return `El pedido mínimo en este local es ${soles(datos.pedidoMinimo)}.`;
+    }
+
+    return '';
+}
+
 function pintarCarrito() {
     const hayLineas = carrito.lineas.length > 0;
     const unidades = carrito.lineas.reduce((total, linea) => total + linea.cantidad, 0);
@@ -460,6 +488,11 @@ function pintarCarrito() {
     }
 
     $('[data-carrito-lineas]').empty().append(carrito.lineas.map(pintarLinea));
+
+    const nota = notaContinuar();
+
+    $('[data-carrito-continuar]').prop('disabled', carrito.estado !== 'listo' || nota !== '');
+    $('[data-carrito-nota]').text(nota).prop('hidden', nota === '');
 
     if (atributoActivo) {
         const $destino = $(`[${atributoActivo}="${indiceActivo}"]:not(:disabled)`);
@@ -523,6 +556,204 @@ function initCarrito() {
 
     if (carrito.lineas.length) {
         validarCarrito();
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/* Finalizar pedido                                                            */
+/* -------------------------------------------------------------------------- */
+
+/** crypto.randomUUID solo existe en HTTPS; getRandomValues también funciona en HTTP. */
+function nuevaClaveIdempotencia() {
+    const bytes = window.crypto.getRandomValues(new Uint8Array(16));
+
+    return [...bytes].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+function initFinalizar() {
+    const hoja = document.getElementById('hoja-finalizar');
+    const $hoja = $(hoja);
+    const $form = $hoja.find('[data-finalizar-form]');
+    const $enviar = $hoja.find('[data-finalizar-enviar]');
+    const valor = (nombre) => $form.find(`[name="${nombre}"]`).val();
+    const tipoElegido = () => $form.find('[data-tipo]:checked').val();
+
+    // La clave dura mientras se reenvíe lo mismo: un reintento no crea otro pedido.
+    let intento = { firma: null, clave: null };
+    let enviando = false;
+
+    function pintarResumen() {
+        const esDelivery = tipoElegido() === 'delivery';
+        const subtotal = aCentimos(carrito.respuesta?.subtotal ?? 0);
+        const delivery = esDelivery ? aCentimos(datos.costoDelivery) : 0;
+
+        $form.find('[data-solo-delivery]').prop('hidden', !esDelivery);
+        $hoja.find('[data-resumen-delivery-fila]').prop('hidden', !esDelivery);
+        $hoja.find('[data-resumen-subtotal]').text(solesDeCentimos(subtotal));
+        $hoja.find('[data-resumen-delivery]').text(delivery === 0 ? 'Gratis' : solesDeCentimos(delivery));
+        $hoja.find('[data-resumen-total]').text(solesDeCentimos(subtotal + delivery));
+    }
+
+    function pintarPago() {
+        const $metodo = $form.find('[data-metodo]:checked');
+
+        $form.find('[data-pago-detalle]').each(function () {
+            $(this).prop('hidden', this.dataset.pagoDetalle !== $metodo.val());
+        });
+        $form.find('[data-pago-referencia]').prop('hidden', $metodo.attr('data-por-verificar') !== '1');
+    }
+
+    function limpiarErrores() {
+        $form.find('[data-error]').text('').prop('hidden', true);
+        $form.find('[aria-invalid]').removeAttr('aria-invalid');
+        $hoja.find('[data-finalizar-error]').prop('hidden', true);
+        $hoja.find('[data-finalizar-reintentar-caja]').prop('hidden', true);
+    }
+
+    function errorGeneral(mensaje, conReintento = false) {
+        $hoja.find('[data-finalizar-error-texto]').text(mensaje);
+        $hoja.find('[data-finalizar-reintentar-caja]').prop('hidden', !conReintento);
+        $hoja.find('[data-finalizar-error]').prop('hidden', false);
+        $hoja.find('[data-finalizar-cuerpo]').scrollTop(0);
+        anunciar(mensaje);
+    }
+
+    function pintarErrores(errores) {
+        const generales = [];
+        let primero = null;
+
+        Object.entries(errores).forEach(([campo, mensajes]) => {
+            const $error = $form.find('[data-error]').filter((_, elemento) => elemento.dataset.error === campo);
+
+            if (!$error.length) {
+                generales.push(mensajes[0]);
+                return;
+            }
+
+            $error.text(mensajes[0]).prop('hidden', false);
+            $form.find(`[name="${campo}"]`).attr('aria-invalid', 'true');
+            primero ??= $error[0];
+        });
+
+        if (generales.length) {
+            errorGeneral(generales.join(' '));
+        } else if (primero) {
+            primero.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+    }
+
+    function estadoEnviando(activo) {
+        enviando = activo;
+        $enviar.prop('disabled', activo);
+        $hoja.find('[data-finalizar-spinner]').prop('hidden', !activo);
+        $hoja.find('[data-finalizar-etiqueta]').text(activo ? 'Enviando…' : 'Confirmar pedido');
+    }
+
+    function datosPedido() {
+        return {
+            nombre: valor('nombre'),
+            telefono: valor('telefono'),
+            tipo: tipoElegido() ?? null,
+            direccion: valor('direccion'),
+            referencia: valor('referencia'),
+            metodo_pago_id: $form.find('[data-metodo]:checked').val() ?? null,
+            referencia_pago: valor('referencia_pago'),
+            acepta_privacidad: $form.find('[data-privacidad]').prop('checked'),
+            sitio_web: $form.find('[data-trampa]').val(),
+            lineas: carrito.lineas.map(({ producto_id, variante_id, opciones, cantidad, observacion }) => ({ producto_id, variante_id, opciones, cantidad, observacion })),
+        };
+    }
+
+    function exito(respuesta) {
+        carrito.lineas = [];
+        guardarCarrito();
+        almacen.escribir(respuesta.codigo, CLAVE_MI_PEDIDO);
+        window.location.assign(respuesta.url);
+    }
+
+    function fallo(xhr) {
+        estadoEnviando(false);
+
+        if (xhr.status === 422) {
+            pintarErrores(xhr.responseJSON?.errors ?? {});
+            return;
+        }
+
+        if (xhr.status === 429) {
+            errorGeneral(xhr.responseJSON?.message || 'Se enviaron muchos pedidos seguidos. Espera un momento e inténtalo otra vez.', true);
+            return;
+        }
+
+        errorGeneral('No pudimos enviar tu pedido. Revisa tu conexión e inténtalo otra vez; no se creará un pedido repetido.', true);
+    }
+
+    function enviar() {
+        if (enviando) {
+            return;
+        }
+
+        limpiarErrores();
+
+        const pedido = datosPedido();
+        const firma = JSON.stringify(pedido);
+
+        if (intento.firma !== firma) {
+            intento = { firma, clave: nuevaClaveIdempotencia() };
+        }
+
+        estadoEnviando(true);
+
+        $.ajax({
+            url: datos.urlPedido,
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ ...pedido, idempotency_key: intento.clave }),
+            dataType: 'json',
+            headers: { Accept: 'application/json' },
+            timeout: TIEMPO_MAXIMO_PEDIDO_MS,
+        })
+            .done(exito)
+            .fail(fallo);
+    }
+
+    $('[data-carrito-continuar]').on('click', () => {
+        document.getElementById('hoja-carrito').close();
+        limpiarErrores();
+        pintarResumen();
+        pintarPago();
+        abrirHoja(hoja);
+    });
+
+    $hoja.on('click', '[data-finalizar-volver]', () => {
+        hoja.close();
+        abrirHoja(document.getElementById('hoja-carrito'));
+        reprogramarValidacion();
+    });
+
+    $form.on('change', '[data-tipo]', pintarResumen);
+    $form.on('change', '[data-metodo]', pintarPago);
+
+    // El error de un campo desaparece en cuanto la persona lo corrige.
+    $form.on('input change', '[name]', function () {
+        $(this).removeAttr('aria-invalid');
+        $form
+            .find('[data-error]')
+            .filter((_, elemento) => elemento.dataset.error === this.name)
+            .text('')
+            .prop('hidden', true);
+    });
+    $form.on('submit', (evento) => {
+        evento.preventDefault();
+        enviar();
+    });
+    $hoja.on('click', '[data-finalizar-reintentar]', enviar);
+}
+
+function initMiPedido() {
+    const codigo = almacen.leer(CLAVE_MI_PEDIDO);
+
+    if (codigo && /^[A-Za-z0-9]{32}$/.test(codigo)) {
+        $('[data-mi-pedido]').attr('href', `${datos.urlPedidos}/${codigo}`).prop('hidden', false);
     }
 }
 
@@ -786,4 +1017,6 @@ $(() => {
     initHojas();
     initDetalle();
     initCarrito();
+    initFinalizar();
+    initMiPedido();
 });

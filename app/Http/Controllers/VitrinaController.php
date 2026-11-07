@@ -26,6 +26,12 @@ class VitrinaController extends Controller
             'datosVitrina' => [
                 'slug' => $restaurante->slug,
                 'urlValidar' => route('vitrina.carrito.validar', $restaurante->slug),
+                'urlPedido' => route('vitrina.pedido.store', $restaurante->slug),
+                'urlPedidos' => url("/{$restaurante->slug}/pedido"),
+                'abierto' => $restaurante->abiertoAhora(),
+                'costoDelivery' => $restaurante->costo_delivery,
+                'pedidoMinimo' => $restaurante->pedido_minimo,
+                'aceptaPedidos' => $restaurante->acepta_delivery || $restaurante->acepta_recojo,
                 'lineasMaximas' => ValidarCarritoRequest::LINEAS_MAXIMAS,
                 'cantidadMaxima' => CalculadorLineaPedido::CANTIDAD_MAXIMA,
                 'productos' => $carta->productosParaNavegador($secciones),

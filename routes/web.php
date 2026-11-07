@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Panel\CategoriaController;
 use App\Http\Controllers\Panel\GrupoOpcionController;
 use App\Http\Controllers\Panel\ProductoController;
+use App\Http\Controllers\PedidoPublicoController;
 use App\Http\Controllers\VitrinaController;
 use App\Support\SlugsReservados;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
@@ -74,4 +75,16 @@ Route::withoutMiddleware([
     Route::post('/{slug}/carrito/validar', [VitrinaController::class, 'validarCarrito'])
         ->middleware('throttle:60,1')
         ->name('vitrina.carrito.validar');
+
+    Route::post('/{slug}/pedido', [PedidoPublicoController::class, 'store'])
+        ->middleware('throttle:crear-pedido')
+        ->name('vitrina.pedido.store');
+    Route::get('/{slug}/pedido/{codigo}', [PedidoPublicoController::class, 'show'])
+        ->where('codigo', '[A-Za-z0-9]{1,64}')
+        ->middleware('throttle:60,1')
+        ->name('vitrina.pedido.seguimiento');
+    Route::get('/{slug}/pedido/{codigo}/estado', [PedidoPublicoController::class, 'estado'])
+        ->where('codigo', '[A-Za-z0-9]{1,64}')
+        ->middleware('throttle:60,1')
+        ->name('vitrina.pedido.estado');
 });

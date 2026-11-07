@@ -60,7 +60,7 @@ class VitrinaTest extends TestCase
         $this->assertGuest();
 
         $metodo = MetodoPago::create(['codigo' => 'yape', 'nombre' => 'Yape']);
-        $this->restaurante->metodosPago()->attach($metodo, ['activo' => true]);
+        $this->restaurante->metodosPago()->attach($metodo, ['activo' => true, 'numero_cuenta' => '962345678']);
         $apagado = MetodoPago::create(['codigo' => 'plin', 'nombre' => 'Plin']);
         $this->restaurante->metodosPago()->attach($apagado, ['activo' => false]);
 
@@ -222,11 +222,18 @@ class VitrinaTest extends TestCase
             ->assertSee('Anticuchos');
     }
 
-    public function test_continue_button_is_visible_but_disabled(): void
+    public function test_cart_offers_to_continue_with_the_order(): void
     {
         $this->get($this->url())
             ->assertSee('Continuar con el pedido')
-            ->assertSee('Disponible pronto');
+            ->assertDontSee('Disponible pronto');
+    }
+
+    public function test_yape_without_an_account_number_is_not_offered(): void
+    {
+        $this->restaurante->metodosPago()->attach(MetodoPago::create(['codigo' => 'yape', 'nombre' => 'Yape', 'requiere_validacion' => true]), ['activo' => true]);
+
+        $this->get($this->url())->assertDontSee('Yape');
     }
 
     public function test_share_metadata_is_present_and_escaped(): void

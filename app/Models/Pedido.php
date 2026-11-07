@@ -3,6 +3,9 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToRestaurante;
+use Database\Factories\PedidoFactory;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -10,13 +13,23 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class Pedido extends Model
 {
-    use BelongsToRestaurante;
+    /** @use HasFactory<PedidoFactory> */
+    use BelongsToRestaurante, HasFactory;
+
+    public const LONGITUD_CODIGO = 32;
+
+    public const MAX_ACTIVOS_POR_TELEFONO = 3;
+
+    /** Versión vigente del aviso de privacidad que acepta el cliente. */
+    public const CONSENTIMIENTO_VERSION = '2026-11-v1';
 
     protected $table = 'pedidos';
 
     protected $fillable = [
         'restaurante_id',
         'numero',
+        'codigo_seguimiento',
+        'idempotency_key',
         'user_id',
         'nombre_cliente',
         'telefono_cliente',
@@ -52,7 +65,16 @@ class Pedido extends Model
         'cancelacion_detalle',
         'registrado_como_perdida',
         'creado_por',
+        'consentimiento_at',
+        'consentimiento_version',
     ];
+
+    /**
+     * El código da acceso al seguimiento: nunca debe salir en listados ni serializaciones.
+     *
+     * @var list<string>
+     */
+    protected $hidden = ['codigo_seguimiento', 'idempotency_key'];
 
     /**
      * @return array<string, string>
@@ -77,7 +99,28 @@ class Pedido extends Model
             'entregado_at' => 'datetime',
             'cancelado_at' => 'datetime',
             'registrado_como_perdida' => 'boolean',
+            'consentimiento_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Pedidos que el local todavía debe atender.
+     *
+     * @param  Builder<Pedido>  $query
+     */
+    public function scopeActivos(Builder $query): void
+    {
+        $query->whereNotIn('estado', ['entregado', 'cancelado']);
+    }
+
+    public function primerNombre(): string
+    {
+        return strtok(trim($this->nombre_cliente), " \t") ?: '';
+    }
+
+    public function tipoTexto(): string
+    {
+        return $this->tipo === 'delivery' ? 'Delivery a domicilio' : 'Recojo en local';
     }
 
     /**
