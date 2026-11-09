@@ -1,3 +1,83 @@
+# FOORA: estado del proyecto
+
+SaaS multi-tenant para restaurantes de Perú (suscripción mensual por local, sin comisión). Laravel 13, PHP 8.3, MySQL 8.4, Blade, Tailwind 4, jQuery y Vite. Alcance de producto completo: `docs/alcance.md`. Interfaz en español de Perú, montos en S/, móvil primero.
+
+## Módulos terminados
+
+- **Login y acceso:** roles superadmin, admin, cajero, mesero, cocina y repartidor; contraseña temporal obliga a pasar por Mi cuenta (`EnsurePanelAccess`).
+- **Carta:** categorías, productos, variantes, grupos de opciones, combos y disponibilidad.
+- **Vitrina pública** (`/{slug}`): carta, carrito, pedido sin login, seguimiento por código.
+- **Panel de pedidos:** estados, revisión de pagos Yape/Plin, actualización en vivo y control de concurrencia.
+- **Configuración:** general, horario, pago, pedidos, notificaciones, usuarios, Mi cuenta y abrir/cerrar local.
+- **Superadmin:** alta de locales, planes, pagos manuales, anulación, cancelación, suspensión, notas internas y resumen.
+- **Suscripción del local:** Mi suscripción (solo lectura), avisos con contacto de FOORA y modo solo lectura fuera de operación.
+- **Auditoría:** `actividad_log` se escribe en todo cambio; aún no tiene pantalla.
+
+## Arquitectura
+
+- **Multi-tenant:** `App\Models\Concerns\BelongsToRestaurante` filtra por el `restaurante_id` del usuario con sesión. No filtra sin sesión, ni para superadmin.
+- **Rutas públicas:** no hay sesión, así que el scope no protege. Filtra siempre explícito por `restaurante_id` y quita el scope a propósito (ver `CartaPublica`, `PedidoPublicoController`).
+- **`Restaurante::operativo()`:** única regla de si el local opera (no suspendido, no cancelada, gracia sin pasar). Sale de las fechas, no depende del comando diario. No confundir con `abiertoAhora()`.
+- **`EnsureLocalOperativo`** (`local.operativo`): fuera de operación solo deja escrituras de pedidos en curso, abrir/cerrar y la propia cuenta.
+- La vitrina y `CrearPedido` también revisan `operativo()`.
+
+### Servicios clave (`app/Services`)
+
+- `CrearPedido`: transacción con la fila del restaurante bloqueada (correlativo, idempotencia, límite por teléfono).
+- `CalculadorLineaPedido`: valida y calcula en céntimos. Los precios salen de la BD, nunca del cliente.
+- `GestionarPedido`: cambios de estado y de pago con la fila bloqueada; conflicto da 409. **No existe clase `TransicionPedido`:** las reglas están en `Pedido::TRANSICIONES` y `Pedido::puedePasarA()`, y las prueba `TransicionPedidoTest`.
+- `SeguimientoPedido`: datos públicos del seguimiento; nunca incluye `cancelacion_detalle`.
+- `CartaPublica`: carta y restaurante de la vitrina.
+- `CrearRestaurante`: alta de local, admin y prueba gratis.
+- `GestionarSuscripcion`: pagos, anulación, plan, cancelación y suspensión, siempre con `lockForUpdate`. La referencia no tiene índice único: **el bloqueo es lo que evita duplicados** (probado con procesos reales en MySQL).
+- `GestionarUsuarios`, `RegistrarActividad` (quita contraseñas y tokens de la auditoría).
+- `App\Support\ContactoFoora` y `WhatsApp`: enlaces wa.me (solo celulares peruanos) y mailto.
+
+### Datos internos de FOORA
+
+El local y el público nunca ven motivos de suspensión, cancelación o anulación, ni notas internas:
+
+- `$hidden`: `Restaurante::notas_internas`, `SuscripcionPago::motivo_anulacion`.
+- `ActividadLog` tiene un global scope que oculta el módulo `suscripciones` a todo usuario de un local. La futura pantalla de Actividad queda protegida sin hacer nada; **no le quites ese scope**.
+- `MotivosInternosTest` recorre todas las rutas GET `panel.*` sin parámetros, incluidas las nuevas.
+
+## Convenciones
+
+- Código de dominio y textos en español; nombres de pruebas en inglés (`test_...`).
+- Pruebas en `tests/Feature/<Área>` con PHPUnit, SQLite en memoria y factories; las de fechas usan `Carbon::setTestNow`.
+- Fechas de negocio en la zona del local: `Restaurante::fechaHoy()`.
+- Respuestas AJAX: JSON con `mensaje`; sin JavaScript, redirección con `status` o `error`.
+- JS con jQuery por módulo en `resources/js`; la vitrina tiene entrada propia para no cargar el JS del panel.
+- Reusa los componentes de `resources/views/components` (`x-button`, `x-card`, `x-input`, `x-table`, etc.).
+- Config propia en `config/foora.php`; lee `env()` solo en `config/`.
+- Pagos y logs no se borran: se anula con una marca.
+
+## Comandos
+
+```bash
+php artisan test --compact                    # toda la suite (no toca MySQL)
+php artisan test --compact --filter=NombreTest
+vendor/bin/pint --dirty --format agent        # después de cambiar PHP
+npm run build
+composer run dev
+php artisan migrate
+php artisan db:seed                           # rubros, planes y métodos de pago
+php artisan db:seed --class=DemoSeeder        # datos demo; bloqueado en producción
+php artisan foora:revisar-suscripciones       # programado 00:10 hora de Lima
+```
+
+Usuarios demo (contraseña `password`): `superadmin@foora.test`, `admin@foora.test`, `cajero@foora.test`, `cocina@foora.test`, `admin@labahia.test`, `admin@chifa.test`. Estados de suscripción: `admin@prueba.test`, `admin@aldia.test`, `admin@gracia.test`, `admin@fuera.test`.
+
+Variables propias: `FOORA_CONTACTO_WHATSAPP` y `FOORA_CONTACTO_EMAIL`. Vacías, los avisos salen sin enlaces.
+
+## Pendientes conocidos
+
+- **Inicio del panel** (`panel/inicio.blade.php`): todavía usa datos estáticos de muestra.
+- **Sin construir (enlaces `#` en el menú):** Alertas, Reservas, Mesas, Promociones, Actividad y Ayuda.
+- **Configuración:** faltan Impresión, Integraciones y Seguridad. **Pedidos:** falta imprimir tickets.
+- **App del cliente:** sin empezar (registro, favoritos, explorar).
+- Las notificaciones de vencimiento son solo avisos en el panel: no salen por correo ni WhatsApp.
+
 <laravel-boost-guidelines>
 === foundation rules ===
 

@@ -12,6 +12,7 @@ use App\Models\Suscripcion;
 use App\Models\SuscripcionPago;
 use App\Models\User;
 use App\Policies\SuperadminPolicy;
+use App\Support\ContactoFoora;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -124,6 +125,7 @@ class AppServiceProvider extends ServiceProvider
                 'puedeCambiarEstado' => $user->can('cambiarEstado', $restaurante),
                 'puedeConfigurar' => $user->can('configurar', $restaurante),
                 'aviso' => $restaurante->avisoSuscripcion(),
+                'contacto' => ContactoFoora::enlaces($restaurante->nombre),
             ]);
 
             $view->with('panelEsSuperadmin', (bool) $user?->esSuperadmin());

@@ -18,6 +18,13 @@ class SuscripcionPago extends Model
 
     protected $table = 'suscripcion_pagos';
 
+    /**
+     * El motivo de una anulación es del equipo de FOORA: nunca sale a JSON ni llega al local.
+     *
+     * @var list<string>
+     */
+    protected $hidden = ['motivo_anulacion'];
+
     protected $fillable = [
         'suscripcion_id',
         'monto',

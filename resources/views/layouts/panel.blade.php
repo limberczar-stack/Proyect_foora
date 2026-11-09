@@ -12,7 +12,7 @@
      * - $navActivo: clave del ítem activo del menú
      *
      * @var array{nombre: string, rol: string, iniciales: string}|null $panelUsuario
-     * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string, puedeCambiarEstado: bool, puedeConfigurar: bool, aviso: ?array{tono: string, titulo: string, mensaje: string}}|null $panelRestaurante
+     * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string, puedeCambiarEstado: bool, puedeConfigurar: bool, aviso: ?array{tono: string, titulo: string, mensaje: string}, contacto: array{whatsapp: ?string, email: ?string}}|null $panelRestaurante
      */
     $panelUsuario ??= ['nombre' => 'Invitado', 'rol' => '', 'iniciales' => '?'];
     $panelRestaurante ??= null;
@@ -352,8 +352,18 @@
                         <x-icon name="alert" class="mt-0.5" />
                         <span><span class="font-semibold">{{ $avisoLocal['titulo'] }}.</span> {{ $avisoLocal['mensaje'] }}</span>
                     </p>
-                    @if ($panelRestaurante['puedeConfigurar'] ?? false)
-                        <a href="{{ route('panel.suscripcion') }}" class="shrink-0 pl-6.5 font-medium underline underline-offset-2 sm:pl-0">Ver mi suscripción</a>
+                    @if (($panelRestaurante['contacto']['whatsapp'] ?? null) || ($panelRestaurante['contacto']['email'] ?? null) || ($panelRestaurante['puedeConfigurar'] ?? false))
+                        <div class="flex shrink-0 flex-wrap gap-x-4 gap-y-1 pl-6.5 sm:pl-0">
+                            @if ($panelRestaurante['contacto']['whatsapp'] ?? null)
+                                <a href="{{ $panelRestaurante['contacto']['whatsapp'] }}" target="_blank" rel="noopener" class="font-medium underline underline-offset-2">WhatsApp</a>
+                            @endif
+                            @if ($panelRestaurante['contacto']['email'] ?? null)
+                                <a href="{{ $panelRestaurante['contacto']['email'] }}" class="font-medium underline underline-offset-2">Correo</a>
+                            @endif
+                            @if ($panelRestaurante['puedeConfigurar'] ?? false)
+                                <a href="{{ route('panel.suscripcion') }}" class="font-medium underline underline-offset-2">Ver mi suscripción</a>
+                            @endif
+                        </div>
                     @endif
                 </div>
             @endif
