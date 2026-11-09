@@ -12,7 +12,7 @@
      * - $navActivo: clave del ítem activo del menú
      *
      * @var array{nombre: string, rol: string, iniciales: string}|null $panelUsuario
-     * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string, puedeCambiarEstado: bool, puedeConfigurar: bool}|null $panelRestaurante
+     * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string, puedeCambiarEstado: bool, puedeConfigurar: bool, aviso: ?array{tono: string, titulo: string, mensaje: string}}|null $panelRestaurante
      */
     $panelUsuario ??= ['nombre' => 'Invitado', 'rol' => '', 'iniciales' => '?'];
     $panelRestaurante ??= null;
@@ -37,7 +37,19 @@
         ]],
     ];
 
+    $panelEsSuperadmin ??= false;
+
+    if ($panelEsSuperadmin) {
+        $menu = [
+            ['grupo' => 'FOORA', 'items' => [
+                ['clave' => 'superadmin-resumen', 'label' => 'Resumen', 'icon' => 'activity', 'href' => route('panel.superadmin.resumen')],
+                ['clave' => 'superadmin-restaurantes', 'label' => 'Restaurantes', 'icon' => 'home', 'href' => route('panel.superadmin.restaurantes.index')],
+            ]],
+        ];
+    }
+
     $alertasPendientes = $navCounts['alertas'] ?? 0;
+    $avisoLocal = $panelRestaurante['aviso'] ?? null;
 @endphp
 <!DOCTYPE html>
 <html lang="es-PE">
@@ -186,6 +198,18 @@
                     <x-icon name="settings" @class(['text-brand-700' => $navActivo === 'configuracion', 'text-faint' => $navActivo !== 'configuracion']) />
                     Configuración
                 </a>
+                <a
+                    href="{{ route('panel.suscripcion') }}"
+                    @if ($navActivo === 'suscripcion') aria-current="page" @endif
+                    @class([
+                        'press flex h-11 items-center gap-3 rounded-control px-3 text-sm lg:h-9',
+                        'bg-active font-medium text-brand-900' => $navActivo === 'suscripcion',
+                        'text-neutral-ink hover:bg-raised hover:text-ink' => $navActivo !== 'suscripcion',
+                    ])
+                >
+                    <x-icon name="wallet" @class(['text-brand-700' => $navActivo === 'suscripcion', 'text-faint' => $navActivo !== 'suscripcion']) />
+                    Mi suscripción
+                </a>
             @endif
             <a href="#" class="press flex h-11 items-center gap-3 rounded-control px-3 text-sm text-neutral-ink hover:bg-raised hover:text-ink lg:h-9">
                 <x-icon name="help" class="text-faint" />
@@ -219,8 +243,8 @@
                     </p>
                 </div>
 
-                {{-- Campana de alertas --}}
-                <div class="relative" data-dropdown>
+                {{-- Campana de alertas: son de un local, el superadmin no tiene --}}
+                <div class="relative" data-dropdown @if ($panelEsSuperadmin) hidden @endif>
                     <x-button
                         variant="ghost"
                         size="icon"
@@ -318,6 +342,22 @@
         </header>
 
         <main id="contenido" tabindex="-1" class="mx-auto w-full max-w-[90rem] flex-1 px-4 pb-16 pt-5 focus:outline-none sm:px-6 sm:pt-6 lg:px-8 lg:pt-8">
+            @if ($avisoLocal)
+                <div @class([
+                    'mb-5 flex flex-col gap-2 rounded-control px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between sm:gap-4',
+                    'bg-danger-bg text-danger-ink' => $avisoLocal['tono'] === 'danger',
+                    'bg-warning-bg text-warning-ink' => $avisoLocal['tono'] === 'warning',
+                ]) role="status" data-aviso-suscripcion>
+                    <p class="flex items-start gap-2.5">
+                        <x-icon name="alert" class="mt-0.5" />
+                        <span><span class="font-semibold">{{ $avisoLocal['titulo'] }}.</span> {{ $avisoLocal['mensaje'] }}</span>
+                    </p>
+                    @if ($panelRestaurante['puedeConfigurar'] ?? false)
+                        <a href="{{ route('panel.suscripcion') }}" class="shrink-0 pl-6.5 font-medium underline underline-offset-2 sm:pl-0">Ver mi suscripción</a>
+                    @endif
+                </div>
+            @endif
+
             @if (session('status'))
                 <div class="mb-5 flex items-start gap-2.5 rounded-control bg-success-bg px-4 py-3 text-sm text-success-ink" role="status" data-flash>
                     <x-icon name="check" class="mt-0.5" />

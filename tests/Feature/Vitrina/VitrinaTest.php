@@ -85,15 +85,13 @@ class VitrinaTest extends TestCase
         $this->assertDatabaseCount('sessions', 0);
     }
 
-    public function test_missing_inactive_hidden_or_deleted_restaurants_are_not_found(): void
+    public function test_missing_hidden_or_deleted_restaurants_are_not_found(): void
     {
-        $inactivo = Restaurante::factory()->inactivo()->create();
         $oculto = Restaurante::factory()->create(['visible_en_app' => false]);
         $eliminado = Restaurante::factory()->create();
         $eliminado->delete();
 
         $this->get('/no-existe')->assertNotFound();
-        $this->get($this->url($inactivo))->assertNotFound();
         $this->get($this->url($oculto))->assertNotFound();
         $this->get($this->url($eliminado))->assertNotFound();
     }

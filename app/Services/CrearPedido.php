@@ -10,6 +10,7 @@ use App\Models\PedidoItem;
 use App\Models\PedidoItemOpcion;
 use App\Models\Restaurante;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -23,6 +24,8 @@ use Illuminate\Validation\ValidationException;
  */
 class CrearPedido
 {
+    public const MENSAJE_NO_DISPONIBLE = 'Este restaurante no está disponible por ahora.';
+
     private const INTENTOS_POR_BLOQUEO_MUTUO = 3;
 
     public function __construct(private CalculadorLineaPedido $calculador) {}
@@ -68,6 +71,10 @@ class CrearPedido
 
     private function comprobarLocal(Restaurante $local, string $tipo): void
     {
+        if (! $local->operativo()) {
+            throw new HttpResponseException(response()->json(['message' => self::MENSAJE_NO_DISPONIBLE], 409));
+        }
+
         if (! $local->abiertoAhora()) {
             throw ValidationException::withMessages(['restaurante' => "{$local->nombre} está cerrado ahora. Tu carrito sigue guardado para cuando abra."]);
         }

@@ -6,8 +6,12 @@ use App\Http\Controllers\Panel\ConfiguracionController;
 use App\Http\Controllers\Panel\EstadoLocalController;
 use App\Http\Controllers\Panel\GrupoOpcionController;
 use App\Http\Controllers\Panel\MiCuentaController;
+use App\Http\Controllers\Panel\MiSuscripcionController;
 use App\Http\Controllers\Panel\PedidoController;
 use App\Http\Controllers\Panel\ProductoController;
+use App\Http\Controllers\Panel\Superadmin\RestauranteController;
+use App\Http\Controllers\Panel\Superadmin\ResumenController;
+use App\Http\Controllers\Panel\Superadmin\SuscripcionController;
 use App\Http\Controllers\Panel\UsuarioController;
 use App\Http\Controllers\PedidoPublicoController;
 use App\Http\Controllers\VitrinaController;
@@ -15,6 +19,7 @@ use App\Support\SlugsReservados;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
+use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
@@ -32,8 +37,37 @@ Route::post('/logout', [LoginController::class, 'destroy'])
     ->middleware('auth')
     ->name('logout');
 
-Route::middleware(['auth', 'panel'])->prefix('panel')->name('panel.')->group(function () {
-    Route::view('/', 'panel.inicio')->name('inicio');
+Route::middleware(['auth', 'panel', 'local.operativo'])->prefix('panel')->name('panel.')->group(function () {
+    // El superadmin no tiene local: su inicio es el resumen de FOORA.
+    Route::get('/', fn (Request $request) => $request->user()->esSuperadmin()
+        ? redirect()->route('panel.superadmin.resumen')
+        : view('panel.inicio'))->name('inicio');
+
+    // Suscripción del local: solo para consultar.
+    Route::get('mi-suscripcion', MiSuscripcionController::class)->name('suscripcion');
+
+    // Sección del equipo de FOORA. {restaurante} se resuelve después de comprobar el permiso (AppServiceProvider).
+    Route::middleware('can:superadmin')->prefix('superadmin')->name('superadmin.')->group(function () {
+        Route::get('/', ResumenController::class)->name('resumen');
+
+        Route::get('restaurantes', [RestauranteController::class, 'index'])->name('restaurantes.index');
+        Route::get('restaurantes/crear', [RestauranteController::class, 'create'])->name('restaurantes.create');
+        Route::post('restaurantes', [RestauranteController::class, 'store'])
+            ->middleware('throttle:alta-restaurante')
+            ->name('restaurantes.store');
+
+        Route::whereNumber('restaurante')->prefix('restaurantes/{restaurante}')->name('restaurantes.')->group(function () {
+            Route::get('/', [RestauranteController::class, 'show'])->name('show');
+            Route::put('/', [RestauranteController::class, 'update'])->name('update');
+            Route::put('notas', [RestauranteController::class, 'notas'])->name('notas');
+            Route::put('plan', [SuscripcionController::class, 'plan'])->name('plan');
+            Route::post('pagos', [SuscripcionController::class, 'registrarPago'])->name('pagos.store');
+            Route::patch('pagos/{pago}/anular', [SuscripcionController::class, 'anularPago'])->whereNumber('pago')->name('pagos.anular');
+            Route::patch('cancelar', [SuscripcionController::class, 'cancelar'])->name('cancelar');
+            Route::patch('suspender', [SuscripcionController::class, 'suspender'])->name('suspender');
+            Route::patch('reactivar', [SuscripcionController::class, 'reactivar'])->name('reactivar');
+        });
+    });
 
     // Mi cuenta: lo único accesible con una contraseña temporal (EnsurePanelAccess).
     Route::get('mi-cuenta', [MiCuentaController::class, 'show'])->name('mi-cuenta');

@@ -310,6 +310,10 @@ function motivoError(xhr) {
         return 'Este local ya no está disponible.';
     }
 
+    if (xhr.status === 409) {
+        return xhr.responseJSON?.message || 'Este restaurante no está disponible por ahora.';
+    }
+
     if (xhr.status === 422) {
         return xhr.responseJSON?.message || 'No pudimos revisar tu carrito.';
     }
@@ -681,6 +685,11 @@ function initFinalizar() {
 
         if (xhr.status === 429) {
             errorGeneral(xhr.responseJSON?.message || 'Se enviaron muchos pedidos seguidos. Espera un momento e inténtalo otra vez.', true);
+            return;
+        }
+
+        if (xhr.status === 409) {
+            errorGeneral(xhr.responseJSON?.message || 'Este restaurante no está disponible por ahora.', false);
             return;
         }
 

@@ -54,11 +54,14 @@ class PanelAccessTest extends TestCase
         $this->actingAs($user)->get(route('panel.inicio'))->assertForbidden();
     }
 
-    public function test_staff_member_of_an_inactive_restaurant_is_forbidden(): void
+    public function test_staff_member_of_a_suspended_restaurant_still_enters_and_sees_the_notice(): void
     {
         $user = User::factory()->admin(Restaurante::factory()->inactivo()->create())->create();
 
-        $this->actingAs($user)->get(route('panel.inicio'))->assertForbidden();
+        $this->actingAs($user)
+            ->get(route('panel.inicio'))
+            ->assertOk()
+            ->assertSee('Tu local está suspendido');
     }
 
     public function test_deactivated_user_with_an_open_session_is_logged_out(): void
@@ -77,8 +80,13 @@ class PanelAccessTest extends TestCase
     {
         $this->actingAs(User::factory()->superadmin()->create())
             ->get(route('panel.inicio'))
+            ->assertRedirect(route('panel.superadmin.resumen'));
+
+        $this->get(route('panel.superadmin.resumen'))
             ->assertOk()
-            ->assertSee('Superadmin · todos los locales');
+            ->assertSee('Superadmin · todos los locales')
+            ->assertSee(route('panel.superadmin.restaurantes.index'))
+            ->assertDontSee(route('panel.pedidos.index'));
     }
 
     public function test_role_middleware_allows_listed_roles(): void

@@ -46,6 +46,13 @@
         'activa' => ['success', 'Activa'],
         'programada' => ['info', 'Programada'],
         'finalizada' => ['neutral', 'Finalizada'],
+        // Suscripciones y locales
+        'prueba' => ['info', 'En prueba'],
+        'vencida' => ['danger', 'Vencida'],
+        'suspendido' => ['danger', 'Suspendido'],
+        'operando' => ['success', 'Activo'],
+        'sin_suscripcion' => ['neutral', 'Sin suscripción'],
+        'anulado' => ['neutral', 'Anulado'],
     ];
 
     [$statusTone, $statusLabel] = $statuses[$status] ?? [null, null];

@@ -21,13 +21,13 @@ class CartaPublica
     private const SCOPE = Producto::RESTAURANTE_SCOPE;
 
     /**
-     * El restaurante publicado con este slug, o 404.
+     * El restaurante publicado con este slug, o 404. Uno suspendido o vencido también se encuentra:
+     * quien lo llama decide con operativo() qué mostrar.
      */
     public function restaurante(string $slug): Restaurante
     {
         return Restaurante::query()
             ->where('slug', $slug)
-            ->where('activo', true)
             ->where('visible_en_app', true)
             ->firstOrFail();
     }

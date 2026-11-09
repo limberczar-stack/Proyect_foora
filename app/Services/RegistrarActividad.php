@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\ActividadLog;
+use App\Models\Restaurante;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -34,9 +35,10 @@ class RegistrarActividad
     public function __construct(private Request $request) {}
 
     /**
-     * @param  'pedidos'|'reservas'|'mesas'|'promociones'|'menu'|'configuracion'|'usuarios'  $modulo
+     * @param  'pedidos'|'reservas'|'mesas'|'promociones'|'menu'|'configuracion'|'usuarios'|'suscripciones'  $modulo
      * @param  array<string, mixed>|null  $antes
      * @param  array<string, mixed>|null  $despues
+     * @param  Restaurante|null  $restaurante  el local afectado, cuando quien actúa es el superadmin (no tiene local propio)
      */
     public function registrar(
         User $actor,
@@ -46,13 +48,16 @@ class RegistrarActividad
         ?Model $sujeto = null,
         ?array $antes = null,
         ?array $despues = null,
+        ?Restaurante $restaurante = null,
     ): ?ActividadLog {
-        if ($actor->restaurante_id === null) {
+        $restauranteId = $restaurante?->id ?? $actor->restaurante_id;
+
+        if ($restauranteId === null) {
             return null;
         }
 
         return ActividadLog::create([
-            'restaurante_id' => $actor->restaurante_id,
+            'restaurante_id' => $restauranteId,
             'user_id' => $actor->id,
             'modulo' => $modulo,
             'accion' => Str::limit($accion, 40, ''),
@@ -64,6 +69,36 @@ class RegistrarActividad
             'ip' => $this->request->ip(),
             'dispositivo' => self::dispositivo((string) $this->request->userAgent()),
             'navegador' => Str::limit(self::navegador((string) $this->request->userAgent()), 80, ''),
+            'revertible' => false,
+        ]);
+    }
+
+    /**
+     * Cambio que hizo el sistema (comando programado): sin usuario, IP ni navegador.
+     *
+     * @param  array<string, mixed>|null  $antes
+     * @param  array<string, mixed>|null  $despues
+     */
+    public function registrarDelSistema(
+        Restaurante $restaurante,
+        string $modulo,
+        string $accion,
+        string $descripcion,
+        ?Model $sujeto = null,
+        ?array $antes = null,
+        ?array $despues = null,
+    ): ActividadLog {
+        return ActividadLog::create([
+            'restaurante_id' => $restaurante->id,
+            'user_id' => null,
+            'modulo' => $modulo,
+            'accion' => Str::limit($accion, 40, ''),
+            'descripcion' => Str::limit($descripcion, 255, ''),
+            'subject_type' => $sujeto?->getMorphClass(),
+            'subject_id' => $sujeto?->getKey(),
+            'datos_antes' => $antes === null ? null : self::limpiar($antes),
+            'datos_despues' => $despues === null ? null : self::limpiar($despues),
+            'dispositivo' => 'Sistema',
             'revertible' => false,
         ]);
     }

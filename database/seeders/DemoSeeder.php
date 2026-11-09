@@ -18,13 +18,15 @@ use App\Models\Producto;
 use App\Models\ProductoVariante;
 use App\Models\Restaurante;
 use App\Models\Rubro;
+use App\Models\Suscripcion;
+use App\Models\SuscripcionPago;
 use App\Models\User;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 
 /**
- * Datos de demostración: tres restaurantes con sus usuarios, mesas y carta, para probar
+ * Datos de demostración: tres restaurantes completos y cuatro con cada estado de suscripción, para probar
  * login, roles y el aislamiento entre locales. No se llama desde DatabaseSeeder.
  *
  * Uso: php artisan db:seed --class=DemoSeeder
@@ -129,7 +131,91 @@ class DemoSeeder extends Seeder
             'Salón' => ['D1' => 4, 'D2' => 4, 'D3' => 6, 'D4' => 8, 'D5' => 2],
         ]);
 
-        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, cocina@foora.test, admin@labahia.test, admin@chifa.test (contraseña: password).');
+        $this->suscripcion($buenSabor, 'activa', 30, 79, []);
+        $this->suscripcion($laBahia, 'activa', 25, 39, []);
+        $this->suscripcion($dragonDorado, 'activa', 12, 79, []);
+
+        $this->localesDeSuscripcion();
+
+        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, cocina@foora.test, admin@labahia.test, admin@chifa.test, admin@prueba.test, admin@aldia.test, admin@gracia.test, admin@fuera.test (contraseña: password).');
+    }
+
+    /**
+     * Cuatro locales para ver cada estado de la suscripción. Las fechas se cuentan desde hoy en Lima.
+     */
+    private function localesDeSuscripcion(): void
+    {
+        $locales = [
+            ['cafe-la-prueba', 'Café La Prueba', 'Cafetería', 'Básico', 'admin@prueba.test', 'Lucía Prado', 'prueba', 3, 0, []],
+            ['burger-al-dia', 'Burger Al Día', 'Fast food', 'Pro', 'admin@aldia.test', 'Hugo Salas', 'activa', 22, 79, [[79, 'Yape', 'YP-200481', -38, -8], [79, 'Transferencia', 'TR-773120', -8, 22]]],
+            ['pollos-en-gracia', 'Pollos En Gracia', 'Pollería', 'Básico', 'admin@gracia.test', 'Nora Vega', 'vencida', -2, 39, [[39, 'Efectivo', null, -32, -2]]],
+            ['cevicheria-fuera', 'Cevichería Fuera', 'Cevichería', 'Premium', 'admin@fuera.test', 'Iván Rojas', 'vencida', -12, 129, [[129, 'Plin', 'PL-558210', -42, -12]]],
+        ];
+
+        foreach ($locales as [$slug, $nombre, $rubro, $plan, $email, $admin, $estado, $dias, $precio, $pagos]) {
+            $restaurante = Restaurante::updateOrCreate(['slug' => $slug], [
+                'rubro_id' => Rubro::where('nombre', $rubro)->value('id'),
+                'plan_id' => Plan::where('nombre', $plan)->value('id'),
+                'nombre' => $nombre,
+                'telefono' => '962000111',
+                'direccion' => 'Jr. Abtao 310',
+                'ciudad' => 'Huánuco',
+                'estado_local' => 'abierto',
+                'visible_en_app' => true,
+                'activo' => true,
+            ]);
+
+            $this->usuario($email, $admin, 'admin', $restaurante);
+            $this->horarios($restaurante, array_fill(1, 7, ['00:00', '23:59']));
+            $this->metodosPago($restaurante, ['efectivo'], '962000111', $admin);
+            $this->mesas($restaurante, ['Salón principal' => ['S1' => 4, 'S2' => 4]]);
+
+            $carta = $this->categoria($restaurante, 'Carta', 0);
+            $this->producto($carta, 'Menú del día', 'El plato del día con su bebida.', precio: 18.00);
+
+            $this->suscripcion($restaurante, $estado, $dias, $precio, $pagos);
+        }
+    }
+
+    /**
+     * Deja al local con una sola suscripción y estos pagos. Es solo para la demo: la aplicación nunca borra pagos.
+     *
+     * @param  list<array{0: int, 1: string, 2: ?string, 3: int, 4: int}>  $pagos  monto, método, referencia, desde y hasta (días desde hoy)
+     */
+    private function suscripcion(Restaurante $restaurante, string $estado, int $dias, float $precio, array $pagos): void
+    {
+        $hoy = now(Restaurante::ZONA_POR_DEFECTO)->startOfDay();
+
+        Suscripcion::withoutGlobalScope(Suscripcion::RESTAURANTE_SCOPE)->where('restaurante_id', $restaurante->id)->delete();
+
+        $suscripcion = Suscripcion::create([
+            'restaurante_id' => $restaurante->id,
+            'plan_id' => $restaurante->plan_id,
+            'estado' => $estado,
+            'inicia_el' => $hoy->copy()->addDays(min($dias, 0) - 45)->toDateString(),
+            'vence_el' => $hoy->copy()->addDays($dias)->toDateString(),
+            'precio_pactado' => $precio,
+        ]);
+
+        $venceAntes = $suscripcion->inicia_el->toDateString();
+        $estadoAntes = 'prueba';
+
+        foreach ($pagos as [$monto, $metodo, $referencia, $desde, $hasta]) {
+            SuscripcionPago::create([
+                'suscripcion_id' => $suscripcion->id,
+                'monto' => $monto,
+                'metodo' => $metodo,
+                'referencia' => $referencia,
+                'periodo_desde' => $hoy->copy()->addDays($desde)->toDateString(),
+                'periodo_hasta' => $hoy->copy()->addDays($hasta)->toDateString(),
+                'pagado_at' => $hoy->copy()->addDays($desde)->setTimezone(config('app.timezone')),
+                'vence_antes' => $venceAntes,
+                'estado_antes' => $estadoAntes,
+            ]);
+
+            $venceAntes = $hoy->copy()->addDays($hasta)->toDateString();
+            $estadoAntes = 'activa';
+        }
     }
 
     /**

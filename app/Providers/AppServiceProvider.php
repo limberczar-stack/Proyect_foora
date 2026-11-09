@@ -8,14 +8,19 @@ use App\Models\Producto;
 use App\Models\Promocion;
 use App\Models\Reserva;
 use App\Models\Restaurante;
+use App\Models\Suscripcion;
+use App\Models\SuscripcionPago;
 use App\Models\User;
+use App\Policies\SuperadminPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
@@ -42,7 +47,23 @@ class AppServiceProvider extends ServiceProvider
             'promocion' => Promocion::class,
             'restaurante' => Restaurante::class,
             'user' => User::class,
+            'suscripcion' => Suscripcion::class,
+            'suscripcion_pago' => SuscripcionPago::class,
         ]);
+
+        Gate::define('superadmin', [SuperadminPolicy::class, 'acceder']);
+
+        // Solo el superadmin llega a estas rutas. El permiso va antes de buscar el local:
+        // así nadie más puede saber con un 404 qué ids existen.
+        Route::bind('restaurante', function (string $id): Restaurante {
+            Gate::authorize('superadmin');
+
+            return Restaurante::findOrFail($id);
+        });
+
+        RateLimiter::for('alta-restaurante', fn (Request $request): Limit => Limit::perMinute(10)
+            ->by((string) $request->user()?->id)
+            ->response(fn () => response()->json(['message' => 'Hiciste muchas altas seguidas. Espera un minuto e inténtalo otra vez.'], 429)));
 
         RateLimiter::for('crear-pedido', function (Request $request): array {
             $responder = fn (): JsonResponse => response()->json([
@@ -102,7 +123,10 @@ class AppServiceProvider extends ServiceProvider
                 'logo' => $restaurante->logoUrl(),
                 'puedeCambiarEstado' => $user->can('cambiarEstado', $restaurante),
                 'puedeConfigurar' => $user->can('configurar', $restaurante),
+                'aviso' => $restaurante->avisoSuscripcion(),
             ]);
+
+            $view->with('panelEsSuperadmin', (bool) $user?->esSuperadmin());
         });
     }
 }

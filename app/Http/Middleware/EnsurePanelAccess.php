@@ -9,7 +9,7 @@ use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Solo deja entrar al panel a personal activo con restaurante activo, o al superadmin.
+ * Solo deja entrar al panel a personal activo de un restaurante existente, o al superadmin.
  * Va después de `auth`. Una cuenta desactivada con la sesión abierta se cierra.
  * Con contraseña temporal (debe_cambiar_password) solo deja entrar a «Mi cuenta» hasta que la cambie.
  */

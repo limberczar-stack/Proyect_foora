@@ -7,3 +7,4 @@ import './carta';
 import './pedidos';
 import './estado-local';
 import './configuracion';
+import './superadmin';

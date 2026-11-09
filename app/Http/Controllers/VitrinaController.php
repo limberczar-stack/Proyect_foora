@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ValidarCarritoRequest;
 use App\Services\CalculadorLineaPedido;
 use App\Services\CartaPublica;
+use App\Services\CrearPedido;
 use App\Services\LineaPedidoCalculada;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Response;
 use Illuminate\View\View;
 
 /**
@@ -14,9 +16,16 @@ use Illuminate\View\View;
  */
 class VitrinaController extends Controller
 {
-    public function show(string $slug, CartaPublica $carta): View
+    public function show(string $slug, CartaPublica $carta): View|Response
     {
         $restaurante = $carta->restauranteConDatos($slug);
+
+        if (! $restaurante->operativo()) {
+            return response()
+                ->view('vitrina.no_disponible', ['restaurante' => $restaurante])
+                ->header('X-Robots-Tag', 'noindex');
+        }
+
         $secciones = $carta->secciones($restaurante);
 
         return view('vitrina.show', [
@@ -45,6 +54,11 @@ class VitrinaController extends Controller
     public function validarCarrito(ValidarCarritoRequest $request, string $slug, CartaPublica $carta, CalculadorLineaPedido $calculador): JsonResponse
     {
         $restaurante = $carta->restaurante($slug);
+
+        if (! $restaurante->operativo()) {
+            return response()->json(['message' => CrearPedido::MENSAJE_NO_DISPONIBLE], Response::HTTP_CONFLICT);
+        }
+
         $resultado = $calculador->calcularCarrito($restaurante->id, $request->lineas());
 
         return response()->json([

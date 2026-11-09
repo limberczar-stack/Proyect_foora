@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Middleware\EnsureLocalOperativo;
 use App\Http\Middleware\EnsurePanelAccess;
 use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Foundation\Application;
@@ -16,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'panel' => EnsurePanelAccess::class,
+            'local.operativo' => EnsureLocalOperativo::class,
             'rol' => EnsureUserHasRole::class,
         ]);
 

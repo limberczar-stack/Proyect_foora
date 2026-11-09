@@ -209,10 +209,8 @@ class ValidarCarritoTest extends TestCase
     public function test_hidden_or_missing_restaurant_is_not_found(): void
     {
         Restaurante::factory()->create(['slug' => 'oculto', 'visible_en_app' => false]);
-        Restaurante::factory()->inactivo()->create(['slug' => 'inactivo']);
 
         $this->validar([], 'oculto')->assertNotFound();
-        $this->validar([], 'inactivo')->assertNotFound();
         $this->validar([], 'no-existe')->assertNotFound();
     }
 

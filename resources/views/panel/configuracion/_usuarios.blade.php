@@ -95,7 +95,7 @@
                                 ]) }}"
                                 aria-label="Restablecer la contraseña de {{ $usuario->name }}">Contraseña</x-button>
                             @if ($usuario->activo)
-                                <x-button size="sm" variant="ghost" class="text-danger-ink"
+                                <x-button size="sm" variant="ghost" class="text-danger-ink!"
                                     data-usuario-accion="{{ json_encode([
                                         'url' => route('panel.configuracion.usuarios.estado', $usuario->id),
                                         'metodo' => 'PATCH',
@@ -107,7 +107,7 @@
                                     ]) }}"
                                     aria-label="Desactivar a {{ $usuario->name }}">Desactivar</x-button>
                             @else
-                                <x-button size="sm" variant="ghost" class="text-success-ink"
+                                <x-button size="sm" variant="ghost" class="text-success-ink!"
                                     data-usuario-accion="{{ json_encode([
                                         'url' => route('panel.configuracion.usuarios.estado', $usuario->id),
                                         'metodo' => 'PATCH',

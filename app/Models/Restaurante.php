@@ -10,7 +10,9 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 
 class Restaurante extends Model
@@ -29,7 +31,16 @@ class Restaurante extends Model
         'alertas' => true,
     ];
 
+    public const ZONA_POR_DEFECTO = 'America/Lima';
+
     protected $table = 'restaurantes';
+
+    /**
+     * notas_internas son del equipo de FOORA: nunca salen a JSON ni llegan al local.
+     *
+     * @var list<string>
+     */
+    protected $hidden = ['notas_internas'];
 
     protected $fillable = [
         'rubro_id',
@@ -95,6 +106,141 @@ class Restaurante extends Model
     public function estaAbierto(): bool
     {
         return $this->estado_local === 'abierto';
+    }
+
+    public function estaSuspendido(): bool
+    {
+        return ! $this->activo;
+    }
+
+    /**
+     * ÚNICA regla de si el local opera: no está suspendido, su suscripción no está cancelada y no
+     * pasó el periodo de gracia. Sale de las fechas, así que no depende del comando diario.
+     * Un local sin ninguna suscripción opera (el alta siempre crea una).
+     *
+     * No confundir con abiertoAhora(): esa dice si atiende en este momento.
+     */
+    public function operativo(): bool
+    {
+        if ($this->estaSuspendido()) {
+            return false;
+        }
+
+        $suscripcion = $this->suscripcionActual;
+
+        if ($suscripcion === null) {
+            return true;
+        }
+
+        return $suscripcion->estado !== 'cancelada'
+            && $this->diasParaVencer() >= -Suscripcion::DIAS_GRACIA;
+    }
+
+    /**
+     * La fecha de hoy (Y-m-d) en la zona del local: el vencimiento no depende de la zona del servidor.
+     */
+    public function fechaHoy(): string
+    {
+        return Carbon::now($this->zona_horaria ?: self::ZONA_POR_DEFECTO)->toDateString();
+    }
+
+    /**
+     * Días hasta vence_el: 0 si vence hoy, negativo si ya venció, null sin suscripción.
+     */
+    public function diasParaVencer(): ?int
+    {
+        $suscripcion = $this->suscripcionActual;
+
+        if ($suscripcion === null) {
+            return null;
+        }
+
+        return (int) Carbon::parse($this->fechaHoy(), 'UTC')
+            ->diffInDays(Carbon::parse($suscripcion->vence_el->toDateString(), 'UTC'), false);
+    }
+
+    /**
+     * Venció, pero todavía opera.
+     */
+    public function enGracia(): bool
+    {
+        return $this->operativo() && $this->suscripcionActual !== null && $this->diasParaVencer() < 0;
+    }
+
+    /**
+     * Días de gracia que quedan después de hoy (0 = hoy es el último).
+     */
+    public function diasDeGracia(): int
+    {
+        return $this->enGracia() ? Suscripcion::DIAS_GRACIA + $this->diasParaVencer() : 0;
+    }
+
+    /**
+     * Estado de la suscripción según las fechas de hoy, o null si no tiene.
+     */
+    public function estadoSuscripcion(): ?string
+    {
+        return $this->suscripcionActual?->estadoEl($this->fechaHoy());
+    }
+
+    /**
+     * Aviso para el panel del local, o null si no hay nada que avisar.
+     *
+     * @return array{tono: 'danger'|'warning', titulo: string, mensaje: string}|null
+     */
+    public function avisoSuscripcion(): ?array
+    {
+        if ($this->estaSuspendido()) {
+            return [
+                'tono' => 'danger',
+                'titulo' => 'Tu local está suspendido',
+                'mensaje' => 'Tu vitrina no está disponible para tus clientes. Puedes terminar los pedidos en curso. Contacta a FOORA para reactivarlo.',
+            ];
+        }
+
+        if ($this->suscripcionActual === null) {
+            return null;
+        }
+
+        if (! $this->operativo()) {
+            return [
+                'tono' => 'danger',
+                'titulo' => $this->suscripcionActual->estado === 'cancelada' ? 'Tu suscripción está cancelada' : 'Tu suscripción venció',
+                'mensaje' => 'Tu vitrina no está disponible para tus clientes. Puedes terminar los pedidos en curso. Contacta a FOORA para reactivarla.',
+            ];
+        }
+
+        $dias = $this->diasParaVencer();
+
+        if ($dias < 0) {
+            $resto = $this->diasDeGracia();
+
+            return [
+                'tono' => 'danger',
+                'titulo' => 'Tu suscripción venció',
+                'mensaje' => match ($resto) {
+                    0 => 'Hoy es el último día de gracia. Desde mañana tu vitrina dejará de estar disponible. Contacta a FOORA para renovarla.',
+                    1 => 'Te queda 1 día de gracia. Después tu vitrina dejará de estar disponible. Contacta a FOORA para renovarla.',
+                    default => "Te quedan {$resto} días de gracia. Después tu vitrina dejará de estar disponible. Contacta a FOORA para renovarla.",
+                },
+            ];
+        }
+
+        if ($dias > Suscripcion::DIAS_AVISO) {
+            return null;
+        }
+
+        $cuando = match ($dias) {
+            0 => 'vence hoy',
+            1 => 'vence mañana',
+            default => "vence en {$dias} días",
+        };
+
+        return [
+            'tono' => 'warning',
+            'titulo' => $this->suscripcionActual->estado === 'prueba' ? "Tu prueba gratis {$cuando}" : "Tu suscripción {$cuando}",
+            'mensaje' => 'Contacta a FOORA para renovarla y que tu vitrina siga disponible.',
+        ];
     }
 
     /**
@@ -238,6 +384,19 @@ class Restaurante extends Model
     public function suscripciones(): HasMany
     {
         return $this->hasMany(Suscripcion::class);
+    }
+
+    /**
+     * La suscripción vigente: la más reciente. Sin scope de tenant porque la consultan la vitrina
+     * pública, el superadmin y el comando diario.
+     *
+     * @return HasOne<Suscripcion, $this>
+     */
+    public function suscripcionActual(): HasOne
+    {
+        return $this->hasOne(Suscripcion::class)
+            ->withoutGlobalScope(Suscripcion::RESTAURANTE_SCOPE)
+            ->latestOfMany('id');
     }
 
     /**

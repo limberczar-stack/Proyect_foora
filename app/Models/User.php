@@ -95,7 +95,7 @@ class User extends Authenticatable
     }
 
     /**
-     * Personal activo con restaurante activo, o superadmin activo.
+     * Personal activo de un restaurante existente, o superadmin activo.
      */
     public function puedeEntrarAlPanel(): bool
     {
@@ -107,9 +107,10 @@ class User extends Authenticatable
             return true;
         }
 
+        // Un local suspendido conserva el acceso de su personal: el panel queda para ver y terminar lo que esté en curso.
         return $this->esPersonal()
             && $this->restaurante_id !== null
-            && $this->restaurante?->activo === true;
+            && $this->restaurante !== null;
     }
 
     public function rolEtiqueta(): string
