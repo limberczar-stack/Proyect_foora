@@ -5,6 +5,7 @@ SaaS multi-tenant para restaurantes de Perú (suscripción mensual por local, si
 ## Módulos terminados
 
 - **Login y acceso:** roles superadmin, admin, cajero, mesero, cocina y repartidor; contraseña temporal obliga a pasar por Mi cuenta (`EnsurePanelAccess`).
+- **Inicio del panel** (`InicioController`, `ResumenInicio`): admin y cajero ven el resumen real del día, pedidos recientes y alertas; solo el admin ve Primeros pasos. Cocina va a sus pedidos. Mesero y repartidor reciben una página (200) que les dice que aún no tienen módulos. Las reglas de cada tarjeta están en `ResumenInicio`.
 - **Carta:** categorías, productos, variantes, grupos de opciones, combos y disponibilidad.
 - **Vitrina pública** (`/{slug}`): carta, carrito, pedido sin login, seguimiento por código.
 - **Panel de pedidos:** estados, revisión de pagos Yape/Plin, actualización en vivo y control de concurrencia.
@@ -66,14 +67,14 @@ php artisan db:seed --class=DemoSeeder        # datos demo; bloqueado en producc
 php artisan foora:revisar-suscripciones       # programado 00:10 hora de Lima
 ```
 
-Usuarios demo (contraseña `password`): `superadmin@foora.test`, `admin@foora.test`, `cajero@foora.test`, `cocina@foora.test`, `admin@labahia.test`, `admin@chifa.test`. Estados de suscripción: `admin@prueba.test`, `admin@aldia.test`, `admin@gracia.test`, `admin@fuera.test`.
+Usuarios demo (contraseña `password`): `superadmin@foora.test`, `admin@foora.test`, `cajero@foora.test`, `cocina@foora.test`, `mesero@foora.test`, `admin@labahia.test`, `admin@chifa.test`. Estados de suscripción: `admin@prueba.test`, `admin@aldia.test`, `admin@gracia.test`, `admin@fuera.test`.
 
 Variables propias: `FOORA_CONTACTO_WHATSAPP` y `FOORA_CONTACTO_EMAIL`. Vacías, los avisos salen sin enlaces.
 
 ## Pendientes conocidos
 
-- **Inicio del panel** (`panel/inicio.blade.php`): todavía usa datos estáticos de muestra.
-- **Sin construir (enlaces `#` en el menú):** Alertas, Reservas, Mesas, Promociones, Actividad y Ayuda.
+- **Sin construir:** Alertas, Reservas, Mesas, Promociones, Actividad y Ayuda. Están ocultos: cada uno se enciende en `foora.modulos` y aparece en el menú cuando además existe su ruta (`App\Support\Modulos::RUTAS`).
+- **Mesero y repartidor:** aún no tienen módulos asignados; su inicio solo lo explica.
 - **Configuración:** faltan Impresión, Integraciones y Seguridad. **Pedidos:** falta imprimir tickets.
 - **App del cliente:** sin empezar (registro, favoritos, explorar).
 - Las notificaciones de vencimiento son solo avisos en el panel: no salen por correo ni WhatsApp.

@@ -70,7 +70,7 @@ class EstadoLocalTest extends TestCase
      */
     public static function rolesSinInterruptor(): array
     {
-        return ['cocina' => ['cocina'], 'mesero' => ['mesero'], 'repartidor' => ['repartidor']];
+        return ['mesero' => ['mesero'], 'repartidor' => ['repartidor']];
     }
 
     #[DataProvider('rolesSinInterruptor')]
@@ -85,6 +85,19 @@ class EstadoLocalTest extends TestCase
         $this->assertSame('abierto', $this->restaurante->fresh()->estado_local);
 
         $this->get(route('panel.inicio'))->assertOk()->assertDontSee('data-estado-local', false);
+    }
+
+    public function test_kitchen_cannot_change_the_state_and_sees_it_read_only_on_its_orders(): void
+    {
+        $cocina = User::factory()->personal('cocina', $this->restaurante)->create();
+
+        $this->actingAs($cocina)
+            ->patchJson(route('panel.estado-local'), ['estado' => 'cerrado', 'confirmar' => '1'])
+            ->assertForbidden();
+
+        $this->assertSame('abierto', $this->restaurante->fresh()->estado_local);
+
+        $this->get(route('panel.pedidos.index'))->assertOk()->assertDontSee('data-estado-local', false);
     }
 
     public function test_superadmin_is_asked_to_pick_a_restaurant(): void

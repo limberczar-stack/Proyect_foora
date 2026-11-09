@@ -231,7 +231,7 @@ class PedidoController extends Controller
      */
     private function inicioDeHoy(User $usuario): CarbonInterface
     {
-        return now($usuario->restaurante->zona_horaria)->startOfDay()->utc();
+        return $usuario->restaurante->inicioDeHoy();
     }
 
     /**

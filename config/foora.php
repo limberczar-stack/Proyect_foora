@@ -11,4 +11,18 @@ return [
 
     'contacto_email' => env('FOORA_CONTACTO_EMAIL'),
 
+    /*
+     * Módulos del panel que aún no están construidos. Actívalos aquí cuando existan: aparecen en el
+     * menú solo si además existe su ruta (App\Support\Modulos), así nunca hay un enlace sin destino.
+     */
+
+    'modulos' => [
+        'alertas' => false,
+        'reservas' => false,
+        'mesas' => false,
+        'promociones' => false,
+        'actividad' => false,
+        'ayuda' => false,
+    ],
+
 ];

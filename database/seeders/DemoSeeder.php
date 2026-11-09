@@ -98,6 +98,7 @@ class DemoSeeder extends Seeder
         $adminBuenSabor = $this->usuario('admin@foora.test', 'Rosa Quispe', 'admin', $buenSabor);
         $this->usuario('cajero@foora.test', 'Miguel Torres', 'cajero', $buenSabor);
         $this->usuario('cocina@foora.test', 'Carmen Flores', 'cocina', $buenSabor);
+        $this->usuario('mesero@foora.test', 'Luis Chávez', 'mesero', $buenSabor);
         $adminLaBahia = $this->usuario('admin@labahia.test', 'Carla Mendoza', 'admin', $laBahia);
         $adminDragon = $this->usuario('admin@chifa.test', 'Andrés Chang', 'admin', $dragonDorado);
 
@@ -137,7 +138,7 @@ class DemoSeeder extends Seeder
 
         $this->localesDeSuscripcion();
 
-        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, cocina@foora.test, admin@labahia.test, admin@chifa.test, admin@prueba.test, admin@aldia.test, admin@gracia.test, admin@fuera.test (contraseña: password).');
+        $this->command?->info('Demo lista. Usuarios: superadmin@foora.test, admin@foora.test, cajero@foora.test, cocina@foora.test, mesero@foora.test, admin@labahia.test, admin@chifa.test, admin@prueba.test, admin@aldia.test, admin@gracia.test, admin@fuera.test (contraseña: password).');
     }
 
     /**

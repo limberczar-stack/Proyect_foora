@@ -5,6 +5,7 @@ use App\Http\Controllers\Panel\CategoriaController;
 use App\Http\Controllers\Panel\ConfiguracionController;
 use App\Http\Controllers\Panel\EstadoLocalController;
 use App\Http\Controllers\Panel\GrupoOpcionController;
+use App\Http\Controllers\Panel\InicioController;
 use App\Http\Controllers\Panel\MiCuentaController;
 use App\Http\Controllers\Panel\MiSuscripcionController;
 use App\Http\Controllers\Panel\PedidoController;
@@ -19,7 +20,6 @@ use App\Support\SlugsReservados;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
-use Illuminate\Http\Request;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Facades\Route;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
@@ -38,10 +38,8 @@ Route::post('/logout', [LoginController::class, 'destroy'])
     ->name('logout');
 
 Route::middleware(['auth', 'panel', 'local.operativo'])->prefix('panel')->name('panel.')->group(function () {
-    // El superadmin no tiene local: su inicio es el resumen de FOORA.
-    Route::get('/', fn (Request $request) => $request->user()->esSuperadmin()
-        ? redirect()->route('panel.superadmin.resumen')
-        : view('panel.inicio'))->name('inicio');
+    // Cada rol tiene su inicio: ver InicioController.
+    Route::get('/', InicioController::class)->name('inicio');
 
     // Suscripción del local: solo para consultar.
     Route::get('mi-suscripcion', MiSuscripcionController::class)->name('suscripcion');

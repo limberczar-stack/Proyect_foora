@@ -145,6 +145,14 @@ class Restaurante extends Model
     }
 
     /**
+     * Medianoche de hoy en la zona del local, en UTC: el inicio del día para comparar con la base de datos.
+     */
+    public function inicioDeHoy(): CarbonInterface
+    {
+        return Carbon::now($this->zona_horaria ?: self::ZONA_POR_DEFECTO)->startOfDay()->utc();
+    }
+
+    /**
      * Días hasta vence_el: 0 si vence hoy, negativo si ya venció, null sin suscripción.
      */
     public function diasParaVencer(): ?int

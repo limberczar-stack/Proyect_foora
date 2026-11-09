@@ -19,4 +19,11 @@
 @section('actions')
     <a class="boton boton-principal" href="{{ $inicioUrl }}">{{ $inicioTexto }}</a>
     <button type="button" class="boton boton-secundario" onclick="history.back()">Volver</button>
+    {{-- Sin esto, quien no tiene acceso a nada del panel no tendría cómo salir: el inicio lo trae de vuelta aquí. --}}
+    @if (request()->hasSession() && auth()->check())
+        <form method="POST" action="{{ route('logout') }}" style="display: contents">
+            @csrf
+            <button type="submit" class="boton boton-secundario">Cerrar sesión</button>
+        </form>
+    @endif
 @endsection

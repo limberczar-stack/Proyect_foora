@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\Alerta;
 use App\Models\Mesa;
 use App\Models\Pedido;
 use App\Models\Producto;
@@ -13,6 +14,7 @@ use App\Models\SuscripcionPago;
 use App\Models\User;
 use App\Policies\SuperadminPolicy;
 use App\Support\ContactoFoora;
+use App\Support\Modulos;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Contracts\View\View as ViewContract;
 use Illuminate\Database\Eloquent\Relations\Relation;
@@ -109,11 +111,22 @@ class AppServiceProvider extends ServiceProvider
                 'iniciales' => $user->iniciales(),
             ]);
 
-            // Badge del menú: pedidos que esperan ser aceptados.
-            $view->with('navPedidosNuevos', $restaurante === null ? null : Pedido::query()
+            // El menú solo ofrece lo que el rol puede abrir.
+            $puedeVerPedidos = $restaurante !== null && $user->can('viewAny', Pedido::class);
+            $puedeVerCarta = $restaurante !== null && $user->can('viewAny', Producto::class);
+            $view->with('panelPermisos', ['pedidos' => $puedeVerPedidos, 'carta' => $puedeVerCarta]);
+
+            // Badge del menú: pedidos que esperan ser aceptados. La cocina no los ve hasta que se aceptan.
+            $view->with('navPedidosNuevos', $puedeVerPedidos && $user->rol !== 'cocina' ? Pedido::query()
                 ->where('restaurante_id', $restaurante->id)
                 ->where('estado', 'nuevo')
-                ->count());
+                ->count() : 0);
+
+            // null oculta la campana y el badge: el módulo Alertas no está activo o el rol no lo usa.
+            $view->with('navAlertas', $puedeVerCarta && Modulos::activo('alertas') ? Alerta::query()
+                ->where('restaurante_id', $restaurante->id)
+                ->whereNull('resuelta_at')
+                ->count() : null);
 
             $view->with('panelRestaurante', $restaurante === null ? null : [
                 'nombre' => $restaurante->nombre,

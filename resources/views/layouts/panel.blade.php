@@ -5,50 +5,58 @@
      * Datos reales (view composer en AppServiceProvider):
      * - $panelUsuario: nombre, rol, iniciales
      * - $panelRestaurante: nombre, ciudad, plan, abierto, iniciales, logo (null para el superadmin)
+     * - $panelPermisos: lo que el rol puede abrir; el menú no ofrece lo demás
+     * - $navPedidosNuevos: pedidos que esperan ser aceptados
+     * - $navAlertas: alertas sin resolver, o null si el módulo Alertas no se muestra
      *
-     * Variables opcionales que define la vista hija:
-     * - $navCounts: conteos de colas que requieren acción (pedidos nuevos, alertas, reservas por confirmar)
-     * - $alertasRecientes: lista corta para el menú de la campana
+     * Variable opcional que define la vista hija:
      * - $navActivo: clave del ítem activo del menú
+     *
+     * Los módulos en construcción salen de foora.modulos (App\Support\Modulos).
      *
      * @var array{nombre: string, rol: string, iniciales: string}|null $panelUsuario
      * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string, puedeCambiarEstado: bool, puedeConfigurar: bool, aviso: ?array{tono: string, titulo: string, mensaje: string}, contacto: array{whatsapp: ?string, email: ?string}}|null $panelRestaurante
+     * @var array{pedidos: bool, carta: bool}|null $panelPermisos
      */
     $panelUsuario ??= ['nombre' => 'Invitado', 'rol' => '', 'iniciales' => '?'];
     $panelRestaurante ??= null;
-    $navCounts ??= [];
-    $alertasRecientes ??= [];
+    $panelPermisos ??= ['pedidos' => false, 'carta' => false];
     $navActivo ??= 'inicio';
-    $navPedidosNuevos ??= null;
-
-    /** @var list<array{grupo: string, items: list<array{clave: string, label: string, icon: string, href: string, count?: int, countLabel?: string}>}> $menu */
-    $menu = [
-        ['grupo' => 'Operación', 'items' => [
-            ['clave' => 'inicio', 'label' => 'Inicio', 'icon' => 'home', 'href' => route('panel.inicio')],
-            ['clave' => 'pedidos', 'label' => 'Pedidos', 'icon' => 'receipt', 'href' => route('panel.pedidos.index'), 'count' => $navPedidosNuevos ?? ($navCounts['pedidos'] ?? 0), 'countLabel' => 'pedidos nuevos', 'vivo' => true],
-            ['clave' => 'alertas', 'label' => 'Alertas', 'icon' => 'bell', 'href' => '#', 'count' => $navCounts['alertas'] ?? 0, 'countLabel' => 'alertas sin resolver'],
-            ['clave' => 'reservas', 'label' => 'Reservas', 'icon' => 'calendar', 'href' => '#', 'count' => $navCounts['reservas'] ?? 0, 'countLabel' => 'reservas por confirmar'],
-            ['clave' => 'mesas', 'label' => 'Mesas', 'icon' => 'table', 'href' => '#'],
-        ]],
-        ['grupo' => 'Gestión', 'items' => [
-            ['clave' => 'carta', 'label' => 'Carta', 'icon' => 'book', 'href' => route('panel.carta.productos.index')],
-            ['clave' => 'promociones', 'label' => 'Promociones', 'icon' => 'tag', 'href' => '#'],
-            ['clave' => 'actividad', 'label' => 'Actividad', 'icon' => 'activity', 'href' => '#'],
-        ]],
-    ];
-
+    $navPedidosNuevos ??= 0;
+    $navAlertas ??= null;
     $panelEsSuperadmin ??= false;
 
-    if ($panelEsSuperadmin) {
-        $menu = [
+    // Admin y cajero son quienes pueden abrir la carta: también serán quienes usen los demás módulos del local.
+    $moduloVisible = fn (string $modulo): bool => $panelPermisos['carta'] && \App\Support\Modulos::activo($modulo);
+
+    /** @var list<array{grupo: string, items: list<array{clave: string, label: string, icon: string, ruta: string, visible?: bool, count?: int, countLabel?: string, vivo?: bool}>}> $menu */
+    $menu = $panelEsSuperadmin
+        ? [
             ['grupo' => 'FOORA', 'items' => [
-                ['clave' => 'superadmin-resumen', 'label' => 'Resumen', 'icon' => 'activity', 'href' => route('panel.superadmin.resumen')],
-                ['clave' => 'superadmin-restaurantes', 'label' => 'Restaurantes', 'icon' => 'home', 'href' => route('panel.superadmin.restaurantes.index')],
+                ['clave' => 'superadmin-resumen', 'label' => 'Resumen', 'icon' => 'activity', 'ruta' => 'panel.superadmin.resumen'],
+                ['clave' => 'superadmin-restaurantes', 'label' => 'Restaurantes', 'icon' => 'home', 'ruta' => 'panel.superadmin.restaurantes.index'],
+            ]],
+        ]
+        : [
+            ['grupo' => 'Operación', 'items' => [
+                ['clave' => 'inicio', 'label' => 'Inicio', 'icon' => 'home', 'ruta' => 'panel.inicio'],
+                ['clave' => 'pedidos', 'label' => 'Pedidos', 'icon' => 'receipt', 'ruta' => 'panel.pedidos.index', 'visible' => $panelPermisos['pedidos'], 'count' => $navPedidosNuevos, 'countLabel' => 'pedidos nuevos', 'vivo' => true],
+                ['clave' => 'alertas', 'label' => 'Alertas', 'icon' => 'bell', 'ruta' => \App\Support\Modulos::RUTAS['alertas'], 'visible' => $navAlertas !== null, 'count' => $navAlertas ?? 0, 'countLabel' => 'alertas sin resolver'],
+                ['clave' => 'reservas', 'label' => 'Reservas', 'icon' => 'calendar', 'ruta' => \App\Support\Modulos::RUTAS['reservas'], 'visible' => $moduloVisible('reservas')],
+                ['clave' => 'mesas', 'label' => 'Mesas', 'icon' => 'table', 'ruta' => \App\Support\Modulos::RUTAS['mesas'], 'visible' => $moduloVisible('mesas')],
+            ]],
+            ['grupo' => 'Gestión', 'items' => [
+                ['clave' => 'carta', 'label' => 'Carta', 'icon' => 'book', 'ruta' => 'panel.carta.productos.index', 'visible' => $panelPermisos['carta']],
+                ['clave' => 'promociones', 'label' => 'Promociones', 'icon' => 'tag', 'ruta' => \App\Support\Modulos::RUTAS['promociones'], 'visible' => $moduloVisible('promociones')],
+                ['clave' => 'actividad', 'label' => 'Actividad', 'icon' => 'activity', 'ruta' => \App\Support\Modulos::RUTAS['actividad'], 'visible' => $moduloVisible('actividad')],
             ]],
         ];
-    }
 
-    $alertasPendientes = $navCounts['alertas'] ?? 0;
+    $menu = collect($menu)
+        ->map(fn (array $grupo): array => [...$grupo, 'items' => array_filter($grupo['items'], fn (array $item): bool => $item['visible'] ?? true)])
+        ->filter(fn (array $grupo): bool => $grupo['items'] !== [])
+        ->all();
+
     $avisoLocal = $panelRestaurante['aviso'] ?? null;
 @endphp
 <!DOCTYPE html>
@@ -158,7 +166,7 @@
                         @php $esActivo = $item['clave'] === $navActivo; @endphp
                         <li>
                             <a
-                                href="{{ $item['href'] }}"
+                                href="{{ route($item['ruta']) }}"
                                 @if ($esActivo) aria-current="page" @endif
                                 @class([
                                     'press flex h-11 items-center gap-3 rounded-control px-3 text-sm lg:h-9',
@@ -184,6 +192,7 @@
             @endforeach
         </nav>
 
+        @if (($panelRestaurante['puedeConfigurar'] ?? false) || \App\Support\Modulos::activo('ayuda'))
         <div class="border-t border-line px-3 py-3">
             @if ($panelRestaurante['puedeConfigurar'] ?? false)
                 <a
@@ -211,11 +220,14 @@
                     Mi suscripción
                 </a>
             @endif
-            <a href="#" class="press flex h-11 items-center gap-3 rounded-control px-3 text-sm text-neutral-ink hover:bg-raised hover:text-ink lg:h-9">
-                <x-icon name="help" class="text-faint" />
-                Ayuda
-            </a>
+            @if (\App\Support\Modulos::activo('ayuda'))
+                <a href="{{ route(\App\Support\Modulos::RUTAS['ayuda']) }}" class="press flex h-11 items-center gap-3 rounded-control px-3 text-sm text-neutral-ink hover:bg-raised hover:text-ink lg:h-9">
+                    <x-icon name="help" class="text-faint" />
+                    Ayuda
+                </a>
+            @endif
         </div>
+        @endif
     </aside>
 
     <div class="flex min-h-dvh flex-col lg:pl-[17rem]">
@@ -243,52 +255,23 @@
                     </p>
                 </div>
 
-                {{-- Campana de alertas: son de un local, el superadmin no tiene --}}
-                <div class="relative" data-dropdown @if ($panelEsSuperadmin) hidden @endif>
+                {{-- Campana de alertas: lleva al módulo, así que solo existe si el módulo se muestra --}}
+                @if ($navAlertas !== null)
                     <x-button
                         variant="ghost"
                         size="icon"
                         class="relative"
-                        data-dropdown-trigger
-                        aria-haspopup="true"
-                        aria-expanded="false"
-                        aria-controls="menu-alertas"
-                        aria-label="Alertas: {{ $alertasPendientes }} sin resolver"
+                        :href="route(\App\Support\Modulos::RUTAS['alertas'])"
+                        aria-label="Alertas: {{ $navAlertas }} sin resolver"
                     >
                         <x-icon name="bell" size="20" />
-                        @if ($alertasPendientes > 0)
+                        @if ($navAlertas > 0)
                             <span class="num absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger-dot px-1 text-[0.6875rem] font-semibold leading-none text-white ring-2 ring-ground" aria-hidden="true">
-                                {{ $alertasPendientes }}
+                                {{ $navAlertas }}
                             </span>
                         @endif
                     </x-button>
-
-                    <div
-                        id="menu-alertas"
-                        class="dropdown-menu absolute right-0 top-full z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] rounded-card border border-line bg-surface shadow-float"
-                        data-dropdown-menu
-                        hidden
-                    >
-                        <div class="flex items-center justify-between border-b border-rule px-4 py-3">
-                            <p class="font-semibold">Alertas</p>
-                            <span class="num text-xs text-muted">{{ $alertasPendientes }} sin resolver</span>
-                        </div>
-                        @forelse ($alertasRecientes as $alerta)
-                            <a href="#" class="flex items-start gap-3 border-b border-rule px-4 py-3 last:border-0 hover:bg-raised">
-                                <x-badge :status="$alerta['prioridad']" class="mt-0.5" />
-                                <span class="min-w-0 flex-1">
-                                    <span class="block truncate text-sm font-medium text-ink">{{ $alerta['titulo'] }}</span>
-                                    <span class="block text-xs text-muted">{{ $alerta['hace'] }}</span>
-                                </span>
-                            </a>
-                        @empty
-                            <p class="px-4 py-6 text-center text-sm text-muted">No hay alertas pendientes.</p>
-                        @endforelse
-                        <div class="border-t border-rule p-2">
-                            <a href="#" class="press flex h-10 items-center justify-center rounded-control text-sm font-medium text-brand-700 hover:bg-brand-50">Ver todas las alertas</a>
-                        </div>
-                    </div>
-                </div>
+                @endif
 
                 {{-- Usuario --}}
                 <div class="relative" data-dropdown>
