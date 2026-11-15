@@ -6,7 +6,8 @@
      * página panel.mesas.cuenta. Cada acción es un formulario propio con la version que se está viendo:
      * si otra persona cambió la cuenta, el servidor responde 409 y salon.js vuelve a cargar el detalle.
      *
-     * @var \App\Models\Cuenta $cuenta  con mesero y ocupacionesAbiertas.mesa
+     * @var \App\Models\Cuenta $cuenta  con mesero, ocupacionesAbiertas.mesa y pedidos (ver _rondas)
+     * @var int $totalCentimos  calculado en el servidor
      * @var bool $demorada
      * @var \Illuminate\Support\Collection<int, \App\Models\Mesa> $disponibles  mesas que se pueden ocupar ahora
      * @var \Illuminate\Support\Collection<int, \App\Models\Cuenta> $otras  las demás cuentas abiertas
@@ -18,6 +19,9 @@
     $accion = 'group rounded-control border border-line';
     $titular = 'press flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 text-sm font-medium text-ink [&::-webkit-details-marker]:hidden';
     $ruta = fn (string $nombre): string => route('panel.mesas.cuentas.'.$nombre, $cuenta);
+    $sinServir = $cuenta->pedidos->whereIn('estado', ['en_preparacion', 'listo']);
+    $vivos = $cuenta->pedidos->where('estado', '!=', 'cancelado');
+    $soles = fn (int $centimos): string => "S/\u{00A0}".number_format($centimos / 100, 2);
 @endphp
 
 <div data-cuenta-detalle data-cuenta-id="{{ $cuenta->id }}" data-version="{{ $cuenta->version }}" data-titulo="Cuenta #{{ $cuenta->numero }}">
@@ -25,6 +29,9 @@
         <x-badge :tone="$abierta ? 'warning' : 'neutral'">{{ $cuenta->estadoEtiqueta() }}</x-badge>
         @if ($demorada)
             <x-badge tone="danger">Más de {{ GestionarCuentas::HORAS_PARA_RESALTAR }} h abierta</x-badge>
+        @endif
+        @if ($cuenta->estado === 'precuenta' && $cuenta->precuenta_at)
+            <span class="num text-[0.8125rem] text-muted">desde las {{ $cuenta->precuenta_at->timezone($usuario->restaurante->zona_horaria)->format('H:i') }}</span>
         @endif
     </div>
 
@@ -73,6 +80,27 @@
 
     @if ($abierta)
         <p class="mt-4 hidden rounded-control bg-danger-bg px-3 py-2.5 text-sm text-danger-ink" role="alert" data-cuenta-error></p>
+
+        <div class="mt-4 grid grid-cols-2 gap-2">
+            <x-button variant="primary" icon="plus" :href="route('panel.mesas.cuentas.pedido.create', $cuenta)" data-cuenta-pedir>{{ $cuenta->pedidos->isEmpty() ? 'Agregar pedido' : 'Agregar más' }}</x-button>
+            @if ($usuario->can('pedirPrecuenta', $cuenta) && $vivos->isNotEmpty())
+                @if ($cuenta->estado === 'precuenta')
+                    <x-button icon="printer" :href="route('panel.mesas.cuentas.precuenta.imprimir', $cuenta)" target="_blank" rel="noopener">Imprimir precuenta</x-button>
+                @else
+                    <form method="POST" action="{{ $ruta('precuenta') }}" data-cuenta-form data-precuenta-form>
+                        @csrf
+                        @method('PATCH')
+                        <input type="hidden" name="version" value="{{ $cuenta->version }}">
+                        <x-button type="submit" icon="printer" class="w-full" data-cuenta-enviar data-texto="Pedir precuenta" data-texto-ocupado="Pidiendo…">Pedir precuenta</x-button>
+                    </form>
+                @endif
+            @endif
+        </div>
+    @endif
+
+    @include('panel.mesas._rondas')
+
+    @if ($abierta)
 
         <div class="mt-4 flex flex-col gap-2" data-cuenta-acciones>
             @if ($disponibles->isNotEmpty() && $mesas->count() < GestionarCuentas::MESAS_MAXIMO)
@@ -184,11 +212,19 @@
             @if ($usuario->can('cerrar', $cuenta))
                 <details class="{{ $accion }}">
                     <summary class="{{ $titular }}">Cerrar: cobrado en otro sistema <x-icon name="chevron-down" class="text-faint group-open:rotate-180" /></summary>
-                    <form method="POST" action="{{ $ruta('cerrar') }}" class="flex flex-col gap-3 border-t border-rule p-3" data-cuenta-form>
+                    <form method="POST" action="{{ $ruta('cerrar') }}" class="flex flex-col gap-3 border-t border-rule p-3" data-cuenta-form data-cierra-hoja>
                         @csrf
                         @method('PATCH')
                         <input type="hidden" name="version" value="{{ $cuenta->version }}">
-                        <p class="text-sm text-ink">La cuenta se cierra y {{ $mesas->count() === 1 ? 'su mesa queda disponible' : 'sus '.$mesas->count().' mesas quedan disponibles' }}. Úsalo cuando ya cobraste en tu sistema de ventas.</p>
+                        {{-- El total que se está viendo: si cambió en el servidor, no se cierra (409). --}}
+                        <input type="hidden" name="total_centimos" value="{{ $totalCentimos }}">
+                        <p class="text-sm text-ink">Total: <strong class="num">{{ $soles($totalCentimos) }}</strong>. La cuenta se cierra, sus pedidos quedan pagados y {{ $mesas->count() === 1 ? 'su mesa queda disponible' : 'sus '.$mesas->count().' mesas quedan disponibles' }}. Úsalo cuando ya cobraste en tu sistema de ventas.</p>
+                        @if ($sinServir->isNotEmpty())
+                            <label class="flex min-h-11 cursor-pointer items-start gap-3 rounded-control bg-warning-bg px-3 py-2 text-sm text-warning-ink" data-cerrar-confirmar>
+                                <input type="checkbox" name="confirmar" value="1" class="mt-0.5 size-[1.125rem] accent-brand-700">
+                                <span>{{ $sinServir->count() === 1 ? 'La ronda '.$sinServir->first()->ronda.' aún no se sirvió.' : 'Las rondas '.$sinServir->pluck('ronda')->implode(', ').' aún no se sirvieron.' }} Confirmo que ya se entregaron.</span>
+                            </label>
+                        @endif
                         <x-button type="submit" variant="success" data-cuenta-enviar data-texto="Cerrar cuenta" data-texto-ocupado="Cerrando…">Cerrar cuenta</x-button>
                     </form>
                 </details>
@@ -197,11 +233,11 @@
             @if ($usuario->can('anular', $cuenta))
                 <details class="{{ $accion }}">
                     <summary class="{{ $titular }} text-danger-ink!">Anular cuenta <x-icon name="chevron-down" class="text-faint group-open:rotate-180" /></summary>
-                    <form method="POST" action="{{ $ruta('anular') }}" class="flex flex-col gap-3 border-t border-rule p-3" data-cuenta-form>
+                    <form method="POST" action="{{ $ruta('anular') }}" class="flex flex-col gap-3 border-t border-rule p-3" data-cuenta-form data-cierra-hoja>
                         @csrf
                         @method('PATCH')
                         <input type="hidden" name="version" value="{{ $cuenta->version }}">
-                        <x-campo label="Motivo" for="cuenta-anular-motivo" error="motivo" hint="Queda en el historial. Las mesas se liberan.">
+                        <x-campo label="Motivo" for="cuenta-anular-motivo" error="motivo" :hint="$vivos->isEmpty() ? 'Queda en el historial. Las mesas se liberan.' : 'Queda en el historial. Las mesas se liberan y sus '.$vivos->count().' '.($vivos->count() === 1 ? 'pedido se cancela' : 'pedidos se cancelan').', también los servidos.'">
                             <x-input name="motivo" id="cuenta-anular-motivo" maxlength="255" required autocomplete="off" placeholder="Ej.: se abrió por error" hint />
                         </x-campo>
                         <x-button type="submit" variant="danger" data-cuenta-enviar data-texto="Anular cuenta" data-texto-ocupado="Anulando…">Anular cuenta</x-button>

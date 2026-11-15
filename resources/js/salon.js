@@ -309,6 +309,19 @@ function initPlano() {
             });
     }
 
+    // Al volver de tomar el pedido (?cuenta=ID) se abre esa cuenta.
+    const cuentaPedida = new URL(window.location.href).searchParams.get('cuenta');
+    const $enlaceCuenta = cuentaPedida ? $plano.find(`[data-cuenta-abrir][data-cuenta-id="${cuentaPedida}"]`).first() : $();
+
+    if ($enlaceCuenta.length && typeof $modalCuenta[0]?.showModal === 'function') {
+        $modalCuenta[0].showModal();
+        cargarCuenta($enlaceCuenta.attr('href'));
+
+        const url = new URL(window.location.href);
+        url.searchParams.delete('cuenta');
+        window.history.replaceState(null, '', url);
+    }
+
     $(document).on('click', '[data-cuenta-abrir]', function (evento) {
         if (evento.ctrlKey || evento.metaKey || evento.shiftKey || typeof $modalCuenta[0]?.showModal !== 'function') {
             return;
@@ -324,11 +337,20 @@ function initPlano() {
     $modalCuenta.on('submit', 'form[data-cuenta-form]', function (evento) {
         evento.preventDefault();
 
-        enviar($(this), {
+        const $form = $(this);
+
+        enviar($form, {
             alTerminar(mensaje) {
-                $modalCuenta[0].close();
                 avisar(mensaje);
                 consultar();
+
+                // Cerrar o anular terminan la cuenta: se cierra la hoja. Lo demás (servir, anular una
+                // línea, pedir precuenta, cambiar mesas) deja la cuenta abierta: se recarga su detalle.
+                if ($form.is('[data-cierra-hoja]')) {
+                    $modalCuenta[0].close();
+                } else {
+                    cargarCuenta(cuentaAbierta);
+                }
             },
             alConflicto(mensaje) {
                 // Otra persona cambió la cuenta: se muestra cómo quedó, con el aviso arriba.

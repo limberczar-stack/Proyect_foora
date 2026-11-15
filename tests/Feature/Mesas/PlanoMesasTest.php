@@ -274,7 +274,7 @@ class PlanoMesasTest extends TestCase
         $cerrada = $this->abrir($this->mesero, ['Ventana 1']);
         $anulada = $this->abrir($this->mesero, ['Ventana 2']);
         $gestion = app(GestionarCuentas::class);
-        $gestion->cerrarExterno($this->cajero, $cerrada, 1);
+        $gestion->cerrarExterno($this->cajero, $cerrada, 1, 0);
         $gestion->anular($this->admin, $anulada, 1, 'Se abrió por error');
 
         $this->actingAs($this->cajero);
@@ -318,7 +318,7 @@ class PlanoMesasTest extends TestCase
         $this->abrir($this->mesero, ['Ventana 1']);
         $this->abrir($this->mesero, ['Ventana 2']);
         $cerrada = $this->abrir($this->mesero, ['Ventana 3']);
-        app(GestionarCuentas::class)->cerrarExterno($this->cajero, $cerrada, 1);
+        app(GestionarCuentas::class)->cerrarExterno($this->cajero, $cerrada, 1, 0);
 
         $this->actingAs($this->admin)
             ->patchJson(route('panel.configuracion.usuarios.estado', $this->mesero->id), ['activo' => 0])

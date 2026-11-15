@@ -57,7 +57,7 @@ class CrearPedido
             $this->comprobarCarrito($local, $carrito);
 
             $pedido = $this->guardarPedido($local, $metodo, $datos, $carrito['subtotal']);
-            $this->guardarItems($pedido, $carrito['lineas'], $datos['lineas']);
+            self::guardarItems($pedido, $carrito['lineas'], $datos['lineas']);
             $this->registrarInicio($pedido, $metodo);
 
             return $pedido;
@@ -166,10 +166,12 @@ class CrearPedido
     }
 
     /**
+     * Guarda las líneas ya calculadas (sin errores) con sus opciones. Lo comparte CrearPedidoSalon.
+     *
      * @param  list<array{linea: ?LineaPedidoCalculada, errores: list<string>}>  $calculadas
      * @param  list<array{observacion: ?string}>  $lineas
      */
-    private function guardarItems(Pedido $pedido, array $calculadas, array $lineas): void
+    public static function guardarItems(Pedido $pedido, array $calculadas, array $lineas): void
     {
         foreach ($calculadas as $indice => $fila) {
             /** @var LineaPedidoCalculada $linea */

@@ -62,29 +62,8 @@ class VitrinaController extends Controller
         $resultado = $calculador->calcularCarrito($restaurante->id, $request->lineas());
 
         return response()->json([
-            'lineas' => array_map(fn (array $fila): array => $this->lineaParaNavegador($fila['linea'], $fila['errores']), $resultado['lineas']),
+            'lineas' => array_map(fn (array $fila): array => LineaPedidoCalculada::paraNavegador($fila['linea'], $fila['errores']), $resultado['lineas']),
             'subtotal' => $resultado['subtotal'],
         ]);
-    }
-
-    /**
-     * @param  list<string>  $errores
-     * @return array<string, mixed>
-     */
-    private function lineaParaNavegador(?LineaPedidoCalculada $linea, array $errores): array
-    {
-        return [
-            'valida' => $linea !== null,
-            'errores' => $errores,
-            'nombre' => $linea?->nombre,
-            'variante_nombre' => $linea?->varianteNombre,
-            'opciones' => array_map(fn (array $opcion): array => [
-                'grupo_nombre' => $opcion['grupo_nombre'],
-                'nombre' => $opcion['nombre'],
-                'precio_extra' => $opcion['precio_extra'],
-            ], $linea->opciones ?? []),
-            'precio_unitario' => $linea?->precioUnitario,
-            'subtotal' => $linea?->subtotal,
-        ];
     }
 }

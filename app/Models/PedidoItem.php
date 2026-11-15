@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -26,6 +27,11 @@ class PedidoItem extends Model
     ];
 
     /**
+     * anulado_at, anulado_por y motivo_anulacion los fija GestionarPedidoSalon con forceFill:
+     * una línea enviada a cocina no se borra, se anula con una marca.
+     */
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
@@ -36,7 +42,31 @@ class PedidoItem extends Model
             'subtotal' => 'decimal:2',
             'tiempo_estimado_min' => 'integer',
             'listo_at' => 'datetime',
+            'anulado_at' => 'datetime',
         ];
+    }
+
+    public function estaAnulada(): bool
+    {
+        return $this->anulado_at !== null;
+    }
+
+    /**
+     * Líneas que cuentan para el total: las no anuladas.
+     *
+     * @param  Builder<PedidoItem>  $query
+     */
+    public function scopeVigentes(Builder $query): void
+    {
+        $query->whereNull($query->qualifyColumn('anulado_at'));
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function anuladoPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'anulado_por');
     }
 
     /**

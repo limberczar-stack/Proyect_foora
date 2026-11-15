@@ -16,9 +16,11 @@ Están fuera de phpunit porque la suite usa SQLite en memoria, donde no hay bloq
    php tests/Concurrencia/limite_mesas.php
    php tests/Concurrencia/cuentas.php
    php tests/Concurrencia/cuentas.php --procesos=12
+   php tests/Concurrencia/pedidos_salon.php
+   php tests/Concurrencia/pedidos_salon.php --procesos=12
    ```
 
-Devuelven 0 si todo sale como se espera y 1 si alguna corrida falla. `cuentas.php` tarda unos minutos: reconstruye la base antes de cada una de sus 13 corridas.
+Devuelven 0 si todo sale como se espera y 1 si alguna corrida falla. `cuentas.php` y `pedidos_salon.php` tardan unos minutos: reconstruyen la base antes de cada corrida.
 
 ## Seguridad
 
@@ -59,3 +61,18 @@ Sin bloqueo ni índices, la carrera falla de dos formas distintas, así que se c
 - **`escalonado`**: cada proceso tarda más que el anterior entre leer y escribir, y escribe con una lectura vieja cuando el anterior ya confirmó. Aquí el dato sí se corrompe: varias cuentas abiertas en la misma mesa y números repetidos.
 
 Para que la carrera sea reproducible, cada proceso espera justo después de comprobar que las mesas están libres y después de leer el último número: 150 ms todos (`a_la_vez`), o 150 ms más 300 ms por cada proceso anterior (`escalonado`). La espera depende del ritmo, nunca del modo.
+
+## pedidos_salon.php
+
+Comprueba las rondas de salón (`CrearPedidoSalon`) y su cruce con las operaciones de la cuenta (`GestionarCuentas`) y con los pedidos de la vitrina (`CrearPedido`). La base se reconstruye antes de cada corrida, así el control sin índices no contamina a los demás.
+
+| Escenario | Qué pasa a la vez | Con bloqueo | Control negativo |
+|---|---|---|---|
+| `misma_clave` | N procesos envían la misma ronda con la misma clave | 1 pedido, y los N reciben ese mismo | Sin bloqueo: el índice evita el duplicado, pero los reenvíos reciben 409 en vez de su pedido. Sin índices: varias rondas con la misma clave |
+| `ronda_y_cierre` | Por cada cuenta, un proceso envía una ronda y otro la cierra | Nunca queda un pedido vivo (sin servir o sin pagar) en una cuenta cerrada | Sin bloqueo: aparece |
+| `numeracion` | N pedidos de la vitrina y N rondas de salón | Números 1..2N sin huecos ni duplicados | Rondas sin bloqueo y sin `uq_pedido_num`: números repetidos |
+| `fusion_y_mesa` | Por cada par, uno fusiona las cuentas y otro agrega una mesa a la que se va a fusionar | Gana uno, el otro recibe 409 | Sin bloqueo: una mesa queda ocupada por una cuenta ya fusionada |
+
+En el control sin índices se quitan `uq_ped_idempotencia`, `uq_pedido_num` y `uq_ped_ronda`. Este último también impide dos rondas iguales en la misma cuenta. MySQL lo usa como índice de la FK de `cuenta_id`, así que el script agrega antes un índice simple en su lugar.
+
+En `numeracion` los pedidos de la vitrina siempre usan `CrearPedido` tal cual, con su bloqueo. Basta con que las rondas no bloqueen para que los números choquen.

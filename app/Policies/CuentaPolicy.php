@@ -8,8 +8,9 @@ use App\Services\GestionarCuentas;
 use Illuminate\Auth\Access\Response;
 
 /**
- * Cuentas de salón: admin, cajero y mesero abren y modifican cualquier cuenta del local.
- * Cerrar es de admin y cajero. Anular también, y el mesero solo una cuenta suya.
+ * Cuentas de salón: admin, cajero y mesero abren y modifican cualquier cuenta del local, envían
+ * rondas, las sirven y piden la precuenta. Cerrar es de admin y cajero, y también anular líneas o
+ * rondas. Anular la cuenta: admin y cajero; el mesero solo una cuenta suya sin pedidos vivos.
  * Cocina y repartidor no entran. Una cuenta de otro local nunca llega aquí: el scope la deja en 404.
  */
 class CuentaPolicy
@@ -37,6 +38,27 @@ class CuentaPolicy
         return $this->atender($user) && $cuenta->restaurante_id === $user->restaurante_id;
     }
 
+    /**
+     * Marcar «Servido» una ronda lista.
+     */
+    public function servir(User $user, Cuenta $cuenta): bool
+    {
+        return $this->update($user, $cuenta);
+    }
+
+    public function pedirPrecuenta(User $user, Cuenta $cuenta): bool
+    {
+        return $this->update($user, $cuenta);
+    }
+
+    /**
+     * Anular una línea ya enviada o cancelar una ronda entera.
+     */
+    public function corregirRondas(User $user, Cuenta $cuenta): bool
+    {
+        return $this->cerrar($user, $cuenta);
+    }
+
     public function cerrar(User $user, Cuenta $cuenta): bool
     {
         return in_array($user->rol, ['admin', 'cajero'], true) && $cuenta->restaurante_id === $user->restaurante_id;
@@ -48,7 +70,12 @@ class CuentaPolicy
             return false;
         }
 
-        return in_array($user->rol, ['admin', 'cajero'], true)
-            || ($user->rol === 'mesero' && $cuenta->mesero_id === $user->id);
+        if (in_array($user->rol, ['admin', 'cajero'], true)) {
+            return true;
+        }
+
+        return $user->rol === 'mesero'
+            && $cuenta->mesero_id === $user->id
+            && ! $cuenta->pedidos()->where('estado', '!=', 'cancelado')->exists();
     }
 }

@@ -13,7 +13,9 @@
     $revisarPago = $usuario->can('revisarPago', $pedido) && $pedido->estado_pago === 'por_verificar' && $pedido->estado !== 'cancelado';
     $destinos = collect($pedido->destinosPermitidos())->filter(fn (string $destino): bool => $usuario->can('cambiarEstado', [$pedido, $destino]))->values()->all();
     $activo = ! in_array($pedido->estado, ['entregado', 'cancelado'], true);
-    $pidePago = in_array($pedido->estado_pago, ['pendiente', 'rechazado'], true);
+    // Salón: el pago es de la cuenta, no del pedido. La cocina no recibe montos en ningún pedido.
+    $pidePago = ! $pedido->esSalon() && in_array($pedido->estado_pago, ['pendiente', 'rechazado'], true);
+    $conMontos = $usuario->can('verMontos', \App\Models\Pedido::class);
     $campo = 'h-11 w-full rounded-control border border-line bg-surface px-3 text-sm text-ink focus:border-brand-600 focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-brand-600/30 lg:h-10';
     $estadoActual = fn (string $destino): array => ['desde' => $pedido->estado, 'destino' => $destino];
 @endphp
@@ -33,9 +35,12 @@
     <div class="flex flex-col gap-5 px-5 py-4">
         <p class="hidden rounded-control bg-danger-bg px-4 py-3 text-sm text-danger-ink" role="alert" data-accion-error></p>
 
-        {{-- Cliente --}}
-        <section aria-label="Cliente">
-            <p class="text-base font-semibold text-ink">{{ $pedido->nombre_cliente }}</p>
+        {{-- Cliente, o en salón la mesa, la ronda y quién la envió --}}
+        <section aria-label="{{ $pedido->esSalon() ? 'Mesa' : 'Cliente' }}">
+            <p class="text-base font-semibold text-ink">{{ $pedido->etiqueta() }}</p>
+            @if ($pedido->esSalon())
+                <p class="num text-sm text-muted">Cuenta #{{ $pedido->cuenta?->numero }} · se cobra al cerrar la cuenta</p>
+            @endif
             @if ($verContacto)
                 <p class="num text-sm text-muted">{{ $pedido->telefono_cliente }}</p>
                 <div class="mt-2 flex flex-wrap gap-2">
@@ -70,7 +75,7 @@
         @if ($verContacto)
             <section aria-label="Pago" class="rounded-control bg-raised px-4 py-3">
                 <div class="flex items-center justify-between gap-3">
-                    <p class="text-sm font-medium text-ink">{{ $pedido->metodoPago->nombre }}</p>
+                    <p class="text-sm font-medium text-ink">{{ $pedido->metodoPago?->nombre ?? 'Sin método' }}</p>
                     <x-badge :status="$pedido->estado_pago" />
                 </div>
                 @if ($pedido->referencia_pago)
@@ -78,7 +83,7 @@
                 @endif
 
                 @if ($revisarPago)
-                    <p class="mt-2 text-[0.8125rem] text-muted">Revisa tu app de {{ $pedido->metodoPago->nombre }} antes de validar.</p>
+                    <p class="mt-2 text-[0.8125rem] text-muted">Revisa tu app de {{ $pedido->metodoPago?->nombre }} antes de validar.</p>
                     <div class="mt-2 flex gap-2">
                         <form method="POST" action="{{ route('panel.pedidos.pago', $pedido) }}" data-accion-form>
                             @csrf
@@ -108,11 +113,16 @@
         <section aria-label="Productos">
             <ul class="flex flex-col divide-y divide-rule">
                 @foreach ($pedido->items as $item)
-                    <li class="py-2.5">
+                    <li @class(['py-2.5', 'opacity-60' => $item->estaAnulada()]) @if ($item->estaAnulada()) data-item-anulado @endif>
                         <div class="flex items-start justify-between gap-3 text-sm">
-                            <span class="min-w-0 font-medium text-ink"><span class="num">{{ $item->cantidad }}</span> × {{ $item->nombre }}</span>
-                            <span class="num shrink-0 text-ink">{{ $soles($item->subtotal) }}</span>
+                            <span @class(['min-w-0 font-medium text-ink', 'line-through' => $item->estaAnulada()])><span class="num">{{ $item->cantidad }}</span> × {{ $item->nombre }}</span>
+                            @if ($conMontos)
+                                <span @class(['num shrink-0 text-ink', 'line-through' => $item->estaAnulada()])>{{ $soles($item->subtotal) }}</span>
+                            @endif
                         </div>
+                        @if ($item->estaAnulada())
+                            <p class="mt-0.5 text-[0.8125rem] font-medium text-danger-ink">Anulada: {{ $item->motivo_anulacion }}</p>
+                        @endif
                         @php $detalle = collect([$item->variante_nombre, ...$item->opciones->map(fn ($o) => $o->nombre.((float) $o->precio_extra > 0 ? ' (+'.number_format((float) $o->precio_extra, 2).')' : ''))])->filter()->implode(' · '); @endphp
                         @if ($detalle !== '')
                             <p class="mt-0.5 text-[0.8125rem] text-muted">{{ $detalle }}</p>
@@ -123,13 +133,15 @@
                     </li>
                 @endforeach
             </ul>
-            <dl class="mt-2 flex flex-col gap-0.5 border-t border-rule pt-3 text-sm">
-                <div class="flex justify-between gap-3"><dt class="text-muted">Subtotal</dt><dd class="num">{{ $soles($pedido->subtotal) }}</dd></div>
-                @if ($pedido->tipo === 'delivery')
-                    <div class="flex justify-between gap-3"><dt class="text-muted">Delivery</dt><dd class="num">{{ $soles($pedido->costo_delivery) }}</dd></div>
-                @endif
-                <div class="flex justify-between gap-3 text-base font-bold"><dt>Total</dt><dd class="num">{{ $soles($pedido->total) }}</dd></div>
-            </dl>
+            @if ($conMontos)
+                <dl class="mt-2 flex flex-col gap-0.5 border-t border-rule pt-3 text-sm">
+                    <div class="flex justify-between gap-3"><dt class="text-muted">Subtotal</dt><dd class="num">{{ $soles($pedido->subtotal) }}</dd></div>
+                    @if ($pedido->tipo === 'delivery')
+                        <div class="flex justify-between gap-3"><dt class="text-muted">Delivery</dt><dd class="num">{{ $soles($pedido->costo_delivery) }}</dd></div>
+                    @endif
+                    <div class="flex justify-between gap-3 text-base font-bold"><dt>Total</dt><dd class="num">{{ $soles($pedido->total) }}</dd></div>
+                </dl>
+            @endif
         </section>
 
         {{-- Acciones --}}
@@ -174,10 +186,10 @@
                         @if ($pidePago)
                             <label class="flex min-h-11 cursor-pointer items-center gap-3 text-sm">
                                 <input type="checkbox" name="cobrado" value="1" class="size-[1.125rem] accent-brand-700" @checked($pedido->estado_pago === 'pendiente')>
-                                {{ $pedido->estado_pago === 'rechazado' ? 'Cobrado de otra forma' : 'Cobrado ('.$pedido->metodoPago->nombre.')' }}
+                                {{ $pedido->estado_pago === 'rechazado' ? 'Cobrado de otra forma' : 'Cobrado ('.($pedido->metodoPago?->nombre ?? 'sin método').')' }}
                             </label>
                         @endif
-                        <x-button type="submit" variant="success" class="w-full" data-accion-enviar>{{ $pedido->tipo === 'recojo' ? 'Pedido recogido' : 'Marcar entregado' }}</x-button>
+                        <x-button type="submit" variant="success" class="w-full" data-accion-enviar>{{ match ($pedido->tipo) { 'recojo' => 'Pedido recogido', 'salon' => 'Servido', default => 'Marcar entregado' } }}</x-button>
                     </form>
                 @endif
 

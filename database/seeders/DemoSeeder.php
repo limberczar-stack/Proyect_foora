@@ -23,7 +23,11 @@ use App\Models\Rubro;
 use App\Models\Suscripcion;
 use App\Models\SuscripcionPago;
 use App\Models\User;
+use App\Services\CrearPedidoSalon;
 use App\Services\GestionarCuentas;
+use App\Services\GestionarPedido;
+use App\Services\GestionarPedidoSalon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -640,24 +644,85 @@ class DemoSeeder extends Seeder
      */
     private function cuentasDeSalon(Restaurante $restaurante, User $mesero, User $admin): void
     {
-        if (Cuenta::where('restaurante_id', $restaurante->id)->abiertas()->exists()) {
-            return;
-        }
+        // Reinicio de la demo: pedidos() ya borró los pedidos del local (también las rondas). Las cuentas
+        // demo y sus mesas se reinician igual, para no dejar cuentas sin sus rondas ni mesas ocupadas
+        // sin cuenta. Solo pasa aquí: DemoSeeder está bloqueado en producción.
+        $cuentas = Cuenta::withoutGlobalScopes()->where('restaurante_id', $restaurante->id)->pluck('id');
+        OcupacionMesa::withoutGlobalScopes()->whereIn('cuenta_id', $cuentas)->delete();
+        Alerta::withoutGlobalScopes()->where('restaurante_id', $restaurante->id)->where('referencia_tipo', 'cuenta')->delete();
+        Cuenta::withoutGlobalScopes()->whereIn('id', $cuentas)->update(['fusionada_en_id' => null]);
+        Cuenta::withoutGlobalScopes()->whereIn('id', $cuentas)->delete();
+        Mesa::withoutGlobalScopes()->where('restaurante_id', $restaurante->id)->where('estado', 'ocupada')->update(['estado' => 'disponible']);
 
         $gestion = app(GestionarCuentas::class);
         $mesa = fn (string $codigo): int => Mesa::where('restaurante_id', $restaurante->id)->where('codigo', $codigo)->where('activa', true)->value('id');
 
+        // Rondas: [productos (nombre => cantidad), estado al que llega, nota de la primera línea, minutos después de abrir].
         $demo = [
-            [$mesero, ['4', '5'], 6, 'Cumpleaños: traer torta al final', 50],
-            [$admin, ['T2'], 2, null, 15],
+            [$mesero, ['4', '5'], 6, 'Cumpleaños: traer torta al final', 50, [
+                [['1/2 pollo a la brasa' => 2, 'Inca Kola 500 ml' => 3], 'entregado', null, 2],
+                [['Anticuchos de corazón' => 1, 'Ensalada fresca' => 2], 'listo', null, 20],
+                [['Café pasado' => 2], 'en_preparacion', 'Uno sin azúcar', 45],
+            ], false],
+            [$admin, ['T2'], 2, null, 15, [
+                [['Parrilla personal' => 1, 'Inca Kola 500 ml' => 1], 'entregado', null, 3],
+            ], true],
         ];
 
-        foreach ($demo as [$quien, $codigos, $comensales, $nota, $haceMinutos]) {
+        foreach ($demo as [$quien, $codigos, $comensales, $nota, $haceMinutos, $rondas, $conPrecuenta]) {
             $cuenta = $gestion->abrir($quien, array_map($mesa, $codigos), $comensales, $nota);
             $desde = now()->subMinutes($haceMinutos);
 
             $cuenta->forceFill(['abierta_at' => $desde])->save();
             $cuenta->ocupaciones()->update(['ingreso_at' => $desde]);
+
+            foreach ($rondas as [$productos, $estado, $observacion, $minutosDespues]) {
+                $this->rondaDemo($restaurante, $quien, $admin, $cuenta, $productos, $estado, $observacion, $desde->copy()->addMinutes($minutosDespues));
+            }
+
+            if ($conPrecuenta) {
+                app(GestionarPedidoSalon::class)->pedirPrecuenta($quien, $cuenta, $cuenta->fresh()->version);
+            }
         }
+    }
+
+    /**
+     * Una ronda demo enviada con CrearPedidoSalon (precios del servidor) y llevada hasta $estado.
+     *
+     * @param  array<string, int>  $productos  nombre => cantidad
+     */
+    private function rondaDemo(Restaurante $restaurante, User $quien, User $admin, Cuenta $cuenta, array $productos, string $estado, ?string $observacion, CarbonInterface $momento): void
+    {
+        $lineas = [];
+
+        foreach ($productos as $nombre => $cantidad) {
+            $producto = Producto::withoutGlobalScopes()
+                ->whereHas('categoria', fn ($query) => $query->withoutGlobalScopes()->where('restaurante_id', $restaurante->id))
+                ->where('nombre', $nombre)
+                ->firstOrFail();
+
+            // Los grupos obligatorios (p. ej. la guarnición del pollo) se cumplen con sus primeras opciones disponibles.
+            $opciones = $producto->gruposOpcion()->withoutGlobalScopes()->where('activo', true)
+                ->with(['opciones' => fn ($query) => $query->where('disponible', true)->orderBy('id')])
+                ->get()
+                ->flatMap(fn ($grupo) => $grupo->opciones->take($grupo->minimoElegible())->pluck('id'))
+                ->values()
+                ->all();
+
+            $lineas[] = ['producto_id' => $producto->id, 'variante_id' => null, 'opciones' => $opciones, 'cantidad' => $cantidad, 'observacion' => $lineas === [] ? $observacion : null];
+        }
+
+        $pedido = app(CrearPedidoSalon::class)->enviar($quien, $cuenta, $lineas, 'demo-salon-'.$cuenta->id.'-'.Str::random(12));
+        $gestion = app(GestionarPedido::class);
+
+        if (in_array($estado, ['listo', 'entregado'], true)) {
+            $pedido = $gestion->cambiarEstado($pedido, $admin, 'en_preparacion', 'listo');
+        }
+
+        if ($estado === 'entregado') {
+            $pedido = $gestion->cambiarEstado($pedido, $admin, 'listo', 'entregado');
+        }
+
+        $pedido->forceFill(['created_at' => $momento, 'aceptado_at' => $momento])->save();
     }
 }

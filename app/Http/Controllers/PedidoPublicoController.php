@@ -64,6 +64,7 @@ class PedidoPublicoController extends Controller
         return Pedido::withoutGlobalScope(Pedido::RESTAURANTE_SCOPE)
             ->where('restaurante_id', $restaurante->id)
             ->where('codigo_seguimiento', $codigo)
+            ->where('tipo', '!=', 'salon')
             ->first();
     }
 

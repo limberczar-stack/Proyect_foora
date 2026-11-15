@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Cuenta;
 use App\Models\MetodoPago;
 use App\Models\Pedido;
 use App\Models\Restaurante;
@@ -35,6 +36,26 @@ class PedidoFactory extends Factory
             'total' => 30,
             'estado' => 'nuevo',
         ];
+    }
+
+    /**
+     * Una ronda de una cuenta de salón, ya en preparación. Sin cliente ni método de pago.
+     * Para una ronda real (con líneas y totales del servidor) usa CrearPedidoSalon.
+     */
+    public function salon(Cuenta $cuenta, int $ronda = 1): static
+    {
+        return $this->state(fn (array $attributes): array => [
+            'restaurante_id' => $cuenta->restaurante_id,
+            'cuenta_id' => $cuenta->id,
+            'ronda' => $ronda,
+            'nombre_cliente' => null,
+            'telefono_cliente' => null,
+            'metodo_pago_id' => null,
+            'tipo' => 'salon',
+            'origen' => 'local',
+            'estado' => 'en_preparacion',
+            'aceptado_at' => now(),
+        ]);
     }
 
     public function delivery(): static

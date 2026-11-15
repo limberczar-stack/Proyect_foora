@@ -84,7 +84,7 @@ class CuentasPermisosTest extends TestCase
             'mover' => ['patch', route('panel.mesas.cuentas.mesas.mover', $cuenta), [...$v, 'desde_mesa_id' => $mesaDeLaCuenta, 'hacia_mesa_id' => $this->mesas[5]->id]],
             'fusionar' => ['patch', route('panel.mesas.cuentas.fusionar', $cuenta), [...$v, 'otra_cuenta_id' => $otra->id, 'otra_version' => $otra->version]],
             'transferir' => ['patch', route('panel.mesas.cuentas.transferir', $cuenta), [...$v, 'mesero_id' => $this->cajero->id]],
-            'cerrar' => ['patch', route('panel.mesas.cuentas.cerrar', $cuenta), $v],
+            'cerrar' => ['patch', route('panel.mesas.cuentas.cerrar', $cuenta), [...$v, 'total_centimos' => 0]],
             'anular' => ['patch', route('panel.mesas.cuentas.anular', $cuenta), [...$v, 'motivo' => 'Se abrió por error']],
         ];
     }
@@ -139,14 +139,14 @@ class CuentasPermisosTest extends TestCase
     {
         $cuenta = $this->cuentaDe($this->mesero, [0]);
 
-        $this->actingAs($this->mesero)->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1])->assertForbidden();
+        $this->actingAs($this->mesero)->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1, 'total_centimos' => 0])->assertForbidden();
         $this->assertSinCambios($cuenta);
 
-        $this->actingAs($this->cajero)->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1])->assertOk();
+        $this->actingAs($this->cajero)->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1, 'total_centimos' => 0])->assertOk();
         $this->assertSame('cerrada', $cuenta->fresh()->estado);
 
         $otra = $this->cuentaDe($this->mesero, [1]);
-        $this->actingAs($this->admin)->patchJson(route('panel.mesas.cuentas.cerrar', $otra), ['version' => 1])->assertOk();
+        $this->actingAs($this->admin)->patchJson(route('panel.mesas.cuentas.cerrar', $otra), ['version' => 1, 'total_centimos' => 0])->assertOk();
     }
 
     public function test_the_waiter_voids_only_an_account_of_his_own(): void
@@ -286,7 +286,7 @@ class CuentasPermisosTest extends TestCase
         // Ver sigue permitido, y lo que estaba abierto se puede terminar.
         $this->getJson(route('panel.mesas.plano'))->assertOk();
         $this->get(route('panel.mesas.cuentas.show', $cuenta))->assertOk();
-        $this->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1])->assertOk();
+        $this->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1, 'total_centimos' => 0])->assertOk();
         $this->patchJson(route('panel.mesas.cuentas.anular', $otra), ['version' => 1, 'motivo' => 'Local fuera de operación'])->assertOk();
 
         $this->assertSame(['cerrada', 'anulada'], [$cuenta->fresh()->estado, $otra->fresh()->estado]);
@@ -301,7 +301,7 @@ class CuentasPermisosTest extends TestCase
         $this->getJson(route('panel.mesas.plano'))->assertUnauthorized();
         $this->actingAs(User::factory()->superadmin()->create());
         $this->getJson(route('panel.mesas.plano'))->assertNotFound();
-        $this->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1])->assertNotFound();
+        $this->patchJson(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1, 'total_centimos' => 0])->assertNotFound();
 
         $this->assertSame('abierta', $cuenta->fresh()->estado);
     }

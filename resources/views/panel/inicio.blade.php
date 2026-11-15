@@ -9,7 +9,7 @@
      * @var string $primerNombre
      * @var string $fecha
      * @var string $zonaHoraria
-     * @var array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, activos: int, nuevos: int} $tarjetas
+     * @var array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, cuentasHoy: int, activos: int, nuevos: int} $tarjetas
      * @var array{ocupadas: int, total: int}|null $mesas  null si el local no tiene el módulo Mesas
      * @var bool $tienePedidos
      * @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Pedido> $recientes
@@ -99,6 +99,15 @@
         </x-card>
     @endif
 
+    @php
+        // Delivery y recojo cuentan al entregarse; el salón, al cerrarse la cuenta.
+        $partesVentas = array_filter([
+            $tarjetas['entregadosHoy'] > 0 ? ($tarjetas['entregadosHoy'] === 1 ? '1 entrega' : $tarjetas['entregadosHoy'].' entregas') : null,
+            $tarjetas['cuentasHoy'] > 0 ? ($tarjetas['cuentasHoy'] === 1 ? '1 cuenta de salón' : $tarjetas['cuentasHoy'].' cuentas de salón') : null,
+        ]);
+        $captionVentas = $partesVentas === [] ? 'Aún sin entregas hoy' : 'De '.implode(' y ', $partesVentas);
+    @endphp
+
     {{-- Resumen del día. Un cero solo se muestra cuando el local ya recibe pedidos; antes no significa nada. --}}
     <section aria-labelledby="resumen-titulo" class="mt-6">
         <h2 id="resumen-titulo" class="sr-only">Resumen de hoy</h2>
@@ -109,7 +118,7 @@
                     label="Ventas de hoy"
                     prefix="S/"
                     :value="number_format($tarjetas['ventasHoy'], 2)"
-                    :caption="match ($tarjetas['entregadosHoy']) { 0 => 'Aún sin entregas hoy', 1 => 'De 1 entrega', default => 'De '.$tarjetas['entregadosHoy'].' entregas' }"
+                    :caption="$captionVentas"
                     :href="route('panel.pedidos.index', ['estado' => 'entregado'])"
                     data-tarjeta="ventas-hoy"
                 />
@@ -201,11 +210,11 @@
                         <td data-cell="lead">
                             <p class="flex flex-wrap items-center gap-x-1.5 gap-y-1">
                                 <span class="num font-semibold text-ink">#{{ $pedido->numero }}</span>
-                                <span class="text-ink">{{ $pedido->nombre_cliente }}</span>
+                                <span class="text-ink">{{ $pedido->etiqueta() }}</span>
                                 <x-badge :status="$pedido->estado" class="sm:hidden" />
                             </p>
                             <p class="num mt-0.5 text-[0.8125rem] text-muted">
-                                {{ $pedido->tipo === 'delivery' ? 'Delivery' : 'Recojo' }} · {{ $hora }} · {{ $pedido->metodoPago?->nombre ?? 'Sin método' }}
+                                {{ $pedido->tipoCorto() }} · {{ $hora }} · {{ $pedido->esSalon() ? 'Se cobra por cuenta' : ($pedido->metodoPago?->nombre ?? 'Sin método') }}
                                 @if ($pedido->estado_pago === 'por_verificar')
                                     <span class="font-medium text-warning-ink">por verificar</span>
                                 @elseif ($pedido->estado_pago === 'pagado')

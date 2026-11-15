@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Panel;
 
+use App\Exceptions\RondasSinServir;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Cuentas\AbrirCuentaRequest;
 use App\Models\Cuenta;
@@ -56,9 +57,19 @@ class CuentaController extends Controller
 
         /** @var User $actor */
         $actor = $request->user();
-        $cuenta->load(['mesero:id,name', 'cerradaPor:id,name', 'anuladaPor:id,name', 'fusionadaEn:id,numero', 'ocupacionesAbiertas.mesa:id,codigo']);
+        $cuenta->load([
+            'mesero:id,name',
+            'cerradaPor:id,name',
+            'anuladaPor:id,name',
+            'fusionadaEn:id,numero',
+            'ocupacionesAbiertas.mesa:id,codigo',
+            'pedidos' => fn ($query) => $query->with(['items.opciones', 'items.anuladoPor:id,name', 'creadoPor:id,name']),
+        ]);
 
-        $datos = ['cuenta' => $cuenta, 'demorada' => false, 'disponibles' => collect(), 'otras' => collect(), 'personal' => collect()];
+        // El total sale de los pedidos ya cargados: la misma regla que GestionarCuentas::totalCentimos.
+        $totalCentimos = (int) $cuenta->pedidos->where('estado', '!=', 'cancelado')->sum(fn ($pedido): int => (int) round((float) $pedido->total * 100));
+
+        $datos = ['cuenta' => $cuenta, 'totalCentimos' => $totalCentimos, 'demorada' => false, 'disponibles' => collect(), 'otras' => collect(), 'personal' => collect()];
 
         if ($cuenta->estaAbierta()) {
             $datos['demorada'] = $cuenta->minutosAbierta() >= GestionarCuentas::HORAS_PARA_RESALTAR * 60;
@@ -174,13 +185,26 @@ class CuentaController extends Controller
     public function cerrar(Request $request, Cuenta $cuenta): JsonResponse|RedirectResponse
     {
         Gate::authorize('cerrar', $cuenta);
-        $datos = $this->validar($request, []);
+        $datos = $this->validar($request, [
+            'total_centimos' => ['required', 'integer', 'min:0'],
+            'confirmar' => ['nullable', 'boolean'],
+        ]);
 
-        return $this->ejecutar($request, function () use ($request, $cuenta, $datos): string {
-            $this->gestion->cerrarExterno($request->user(), $cuenta, (int) $datos['version']);
+        try {
+            return $this->ejecutar($request, function () use ($request, $cuenta, $datos): string {
+                $this->gestion->cerrarExterno($request->user(), $cuenta, (int) $datos['version'], (int) $datos['total_centimos'], (bool) ($datos['confirmar'] ?? false));
 
-            return "Se cerró la cuenta #{$cuenta->numero} y sus mesas quedaron disponibles.";
-        });
+                return "Se cerró la cuenta #{$cuenta->numero} y sus mesas quedaron disponibles.";
+            });
+        } catch (RondasSinServir $sinServir) {
+            // Con JavaScript se muestran las rondas y se reenvía con confirmar; sin él, se vuelve al
+            // detalle, donde el formulario de cierre ya ofrece confirmarlas.
+            if ($request->expectsJson()) {
+                return response()->json(['message' => $sinServir->getMessage(), 'requiere_confirmacion' => true, 'rondas' => $sinServir->rondas], 409);
+            }
+
+            return redirect()->route('panel.mesas.cuentas.show', $cuenta)->with('error', $sinServir->getMessage());
+        }
     }
 
     public function anular(Request $request, Cuenta $cuenta): JsonResponse|RedirectResponse
@@ -214,6 +238,8 @@ class CuentaController extends Controller
             'motivo.required' => 'Escribe el motivo de la anulación.',
             'motivo.min' => 'Escribe el motivo de la anulación (al menos 3 caracteres).',
             'motivo.max' => 'El motivo admite hasta 255 caracteres.',
+            'total_centimos.*' => 'Vuelve a abrir la cuenta e inténtalo otra vez.',
+            'confirmar.*' => 'Vuelve a abrir la cuenta e inténtalo otra vez.',
         ]);
     }
 
@@ -228,6 +254,8 @@ class CuentaController extends Controller
 
         try {
             return redirect()->route('panel.mesas.index')->with('status', $operacion());
+        } catch (RondasSinServir $sinServir) {
+            throw $sinServir;
         } catch (ConflictHttpException $conflicto) {
             return redirect()->route('panel.mesas.index')->with('error', $conflicto->getMessage());
         }

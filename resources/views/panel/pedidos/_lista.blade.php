@@ -17,12 +17,19 @@
         'q' => $busqueda !== '' ? $busqueda : null,
         ...$cambios,
     ]));
-    $columnas = [
+    // La cocina no recibe montos en ningún pedido.
+    $conMontos = auth()->user()->can('verMontos', \App\Models\Pedido::class);
+    $columnas = array_values(array_filter([
         ['label' => 'Pedido'],
         ['label' => 'Tipo', 'class' => 'w-28'],
         ['label' => 'Pago', 'class' => 'w-32'],
-        ['label' => 'Total', 'align' => 'right', 'class' => 'w-24'],
-    ];
+        $conMontos ? ['label' => 'Total', 'align' => 'right', 'class' => 'w-24'] : null,
+    ]));
+    $tipos = [null => 'Todos', 'delivery' => 'Delivery', 'recojo' => 'Recojo'];
+
+    if (\App\Support\Modulos::activoPara('mesas', auth()->user()->restaurante)) {
+        $tipos['salon'] = 'Salón';
+    }
     $vacios = [
         'nuevo' => 'No hay pedidos nuevos. Cuando llegue uno, aparecerá aquí con un aviso.',
         'en_preparacion' => 'No hay pedidos en preparación.',
@@ -63,7 +70,7 @@
 
 <div class="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
     <div class="flex gap-1" role="group" aria-label="Tipo de pedido">
-        @foreach ([null => 'Todos', 'delivery' => 'Delivery', 'recojo' => 'Recojo'] as $valor => $texto)
+        @foreach ($tipos as $valor => $texto)
             @php $activo = ($tipo ?? '') === (string) $valor; @endphp
             <a href="{{ $enlace(['tipo' => $valor ?: null, 'page' => null]) }}" @if ($activo) aria-current="true" @endif
                 @class([
@@ -106,14 +113,20 @@
                                 <span class="num font-semibold text-ink">#{{ $pedido->numero }}</span>
                                 <span class="num text-[0.8125rem] text-muted">{{ $pedido->created_at->timezone($zonaHoraria)->format('H:i') }}</span>
                             </span>
-                            <span class="mt-0.5 truncate text-[0.8125rem] text-muted">{{ $pedido->nombre_cliente }}</span>
+                            <span class="mt-0.5 truncate text-[0.8125rem] text-muted">{{ $pedido->etiqueta() }}</span>
                         </a>
                     </td>
-                    <td data-cell="meta" data-label="Tipo" class="text-muted">{{ $pedido->tipo === 'delivery' ? 'Delivery' : 'Recojo' }}</td>
+                    <td data-cell="meta" data-label="Tipo" class="text-muted">{{ $pedido->tipoCorto() }}</td>
                     <td data-cell="meta" data-label="Pago">
-                        <x-badge :status="$pedido->estado_pago" />
+                        @if ($pedido->esSalon())
+                            <span class="text-[0.8125rem] text-muted">Por cuenta</span>
+                        @else
+                            <x-badge :status="$pedido->estado_pago" />
+                        @endif
                     </td>
-                    <td data-cell="end" class="num whitespace-nowrap text-right font-medium text-ink">{{ $soles($pedido->total) }}</td>
+                    @if ($conMontos)
+                        <td data-cell="end" class="num whitespace-nowrap text-right font-medium text-ink">{{ $soles($pedido->total) }}</td>
+                    @endif
                 </tr>
             @endforeach
         </x-table>

@@ -2,11 +2,16 @@
 
 namespace App\Services;
 
+use App\Exceptions\RondasSinServir;
 use App\Models\Cuenta;
 use App\Models\Mesa;
 use App\Models\OcupacionMesa;
+use App\Models\Pedido;
+use App\Models\PedidoHistorial;
 use App\Models\Restaurante;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
@@ -49,6 +54,8 @@ class GestionarCuentas
     public const MENSAJE_YA_NO_ABIERTA = 'Esta cuenta ya no está abierta. Actualizamos el plano.';
 
     public const MENSAJE_INDICE = 'Otra persona ocupó esa mesa o abrió una cuenta al mismo tiempo. Actualizamos el plano; inténtalo otra vez.';
+
+    public const MENSAJE_TOTAL_CAMBIO = 'El total de la cuenta cambió mientras la veías. Revísalo antes de cerrarla.';
 
     public function __construct(private RegistrarActividad $actividad) {}
 
@@ -165,8 +172,12 @@ class GestionarCuentas
     }
 
     /**
-     * Las mesas de $otra pasan a $principal y $otra queda "fusionada" (no se borra).
+     * Las mesas y los pedidos de $otra pasan a $principal, y $otra queda "fusionada" (no se borra).
      * Los comensales se suman y se conserva el mesero de la principal.
+     *
+     * Rondas: las de $otra se agregan al final, en su orden (si la principal tenía 1 y 2, y la otra
+     * 1 a 3, quedan 3 a 5). Las de la principal no cambian de número: la cocina ya las vio. Cada
+     * pedido movido deja en su historial qué ronda y qué cuenta era antes.
      *
      * @throws ConflictHttpException si cualquiera de las dos cambió desde que se vieron
      */
@@ -196,6 +207,8 @@ class GestionarCuentas
                 $this->ocupar($principal, $ocupacion->mesa, $ahora);
             }
 
+            $rondasMovidas = $this->moverRondas($actor, $otra, $principal);
+
             $otra->forceFill([
                 'estado' => 'fusionada',
                 'fusionada_en_id' => $principal->id,
@@ -204,15 +217,23 @@ class GestionarCuentas
                 'version' => $otra->version + 1,
             ])->save();
 
+            // Con rondas nuevas, una precuenta impresa ya no vale: la principal vuelve a abierta.
             $principal->forceFill([
                 'comensales' => min(Cuenta::COMENSALES_MAXIMO, $principal->comensales + $otra->comensales),
                 'version' => $principal->version + 1,
+                ...($principal->estado === 'precuenta' && $rondasMovidas > 0 ? ['estado' => 'abierta'] : []),
             ])->save();
+
+            CrearPedidoSalon::resolverAlertaPrecuenta($otra);
+
+            if ($rondasMovidas > 0) {
+                CrearPedidoSalon::resolverAlertaPrecuenta($principal);
+            }
 
             $codigos = $ajenas->pluck('mesa.codigo')->all();
             $this->actividad->registrar($actor, 'mesas', 'fusiono_cuentas',
                 "Unió la cuenta #{$otra->numero} con la #{$principal->numero}.", $principal,
-                ['comensales' => $comensalesAntes], ['comensales' => $principal->comensales, 'cuenta_fusionada' => $otra->numero, 'mesas_recibidas' => $codigos]);
+                ['comensales' => $comensalesAntes], ['comensales' => $principal->comensales, 'cuenta_fusionada' => $otra->numero, 'mesas_recibidas' => $codigos, 'rondas_recibidas' => $rondasMovidas]);
 
             return $principal;
         }));
@@ -252,12 +273,44 @@ class GestionarCuentas
 
     /**
      * "Cobrado en otro sistema": cierra la cuenta y libera todas sus mesas. El cierre por venta llega con la Caja.
+     *
+     * - $totalCentimos es el total que veía quien cierra; si no coincide con el del servidor, 409.
+     * - Con rondas sin servir responde 409 con la lista (RondasSinServir), salvo que se confirme: entonces
+     *   se marcan servidas. El total se compara igual al confirmar.
+     * - Todos los pedidos no cancelados de la cuenta quedan pagados.
+     *
+     * @throws ConflictHttpException si la cuenta o su total cambiaron
+     * @throws RondasSinServir
      */
-    public function cerrarExterno(User $actor, Cuenta $cuenta, int $version): Cuenta
+    public function cerrarExterno(User $actor, Cuenta $cuenta, int $version, int $totalCentimos, bool $confirmar = false): Cuenta
     {
-        return DB::transaction(function () use ($actor, $cuenta, $version): Cuenta {
+        return DB::transaction(function () use ($actor, $cuenta, $version, $totalCentimos, $confirmar): Cuenta {
             $cuenta = $this->vigente($this->bloquearRestaurante($actor), $cuenta, $version);
+
+            if (self::totalCentimos($cuenta) !== $totalCentimos) {
+                throw new ConflictHttpException(self::MENSAJE_TOTAL_CAMBIO);
+            }
+
+            $sinServir = $this->pedidosVivos($cuenta)->whereIn('estado', ['en_preparacion', 'listo'])->orderBy('ronda')->get();
+
+            if ($sinServir->isNotEmpty() && ! $confirmar) {
+                throw new RondasSinServir($sinServir->map(fn (Pedido $pedido): array => [
+                    'id' => $pedido->id,
+                    'numero' => $pedido->numero,
+                    'ronda' => $pedido->ronda,
+                    'estado' => $pedido->estado,
+                ])->values()->all());
+            }
+
             $ahora = now();
+
+            foreach ($sinServir as $pedido) {
+                $anterior = $pedido->estado;
+                $pedido->forceFill(['estado' => 'entregado', 'entregado_at' => $ahora])->save();
+                $this->historialPedido($pedido, $actor, $anterior, 'entregado', 'Servido al cerrar la cuenta.');
+            }
+
+            $this->pedidosVivos($cuenta)->update(['estado_pago' => 'pagado', 'pago_validado_por' => $actor->id, 'pago_validado_at' => $ahora]);
             $mesas = $this->liberar($cuenta, $ahora);
 
             $cuenta->forceFill([
@@ -268,15 +321,27 @@ class GestionarCuentas
                 'version' => $cuenta->version + 1,
             ])->save();
 
+            CrearPedidoSalon::resolverAlertaPrecuenta($cuenta);
+
             $this->actividad->registrar($actor, 'mesas', 'cerro_cuenta', "Cerró la cuenta #{$cuenta->numero} (cobrado en otro sistema).", $cuenta,
-                ['estado' => 'abierta'], ['estado' => 'cerrada', 'cierre_tipo' => 'externo', 'mesas_liberadas' => $mesas]);
+                ['estado' => 'abierta'], [
+                    'estado' => 'cerrada',
+                    'cierre_tipo' => 'externo',
+                    'total' => number_format($totalCentimos / 100, 2, '.', ''),
+                    'mesas_liberadas' => $mesas,
+                    'rondas_servidas_al_cerrar' => $sinServir->pluck('ronda')->all(),
+                ]);
 
             return $cuenta;
         });
     }
 
     /**
-     * Anula la cuenta con un motivo y libera todas sus mesas.
+     * Anula la cuenta con un motivo y libera todas sus mesas. Sus pedidos no cancelados (también los
+     * ya servidos) se cancelan con el mismo motivo, y cada uno lo deja en su historial.
+     *
+     * Con pedidos vivos solo admin o cajero; el mesero solo anula una cuenta suya sin pedidos
+     * (CuentaPolicy lo revisa antes y aquí se vuelve a revisar con el local bloqueado).
      */
     public function anular(User $actor, Cuenta $cuenta, int $version, string $motivo): Cuenta
     {
@@ -288,8 +353,27 @@ class GestionarCuentas
 
         return DB::transaction(function () use ($actor, $cuenta, $version, $motivo): Cuenta {
             $cuenta = $this->vigente($this->bloquearRestaurante($actor), $cuenta, $version);
+            $vivos = $this->pedidosVivos($cuenta)->orderBy('ronda')->get();
+
+            if ($vivos->isNotEmpty() && ! in_array($actor->rol, ['admin', 'cajero'], true)) {
+                throw new AuthorizationException('Esta cuenta ya tiene pedidos: solo el administrador o el cajero pueden anularla.');
+            }
+
             $ahora = now();
+
+            foreach ($vivos as $pedido) {
+                $anterior = $pedido->estado;
+                $pedido->forceFill([
+                    'estado' => 'cancelado',
+                    'cancelado_at' => $ahora,
+                    'cancelacion_motivo' => 'otro',
+                    'cancelacion_detalle' => "Cuenta anulada: {$motivo}",
+                ])->save();
+                $this->historialPedido($pedido, $actor, $anterior, 'cancelado', "Cuenta #{$cuenta->numero} anulada. Motivo: {$motivo}");
+            }
+
             $mesas = $this->liberar($cuenta, $ahora);
+            CrearPedidoSalon::resolverAlertaPrecuenta($cuenta);
 
             $cuenta->forceFill([
                 'estado' => 'anulada',
@@ -300,7 +384,7 @@ class GestionarCuentas
             ])->save();
 
             $this->actividad->registrar($actor, 'mesas', 'anulo_cuenta', "Anuló la cuenta #{$cuenta->numero}. Motivo: {$motivo}", $cuenta,
-                ['estado' => 'abierta'], ['estado' => 'anulada', 'motivo' => $motivo, 'mesas_liberadas' => $mesas]);
+                ['estado' => 'abierta'], ['estado' => 'anulada', 'motivo' => $motivo, 'mesas_liberadas' => $mesas, 'pedidos_cancelados' => $vivos->pluck('numero')->all()]);
 
             return $cuenta;
         });
@@ -339,6 +423,20 @@ class GestionarCuentas
             ->orderBy('id')
             ->pluck('id')
             ->all();
+    }
+
+    /**
+     * Total de la cuenta en céntimos: la suma de sus pedidos no cancelados (sus totales ya excluyen
+     * las líneas anuladas). Siempre se calcula en el servidor.
+     */
+    public static function totalCentimos(Cuenta $cuenta): int
+    {
+        $total = Pedido::withoutGlobalScopes()
+            ->where('cuenta_id', $cuenta->id)
+            ->where('estado', '!=', 'cancelado')
+            ->sum('total');
+
+        return (int) round((float) $total * 100);
     }
 
     public static function exigirComensales(int $comensales): void
@@ -446,6 +544,43 @@ class GestionarCuentas
         }
 
         return $ocupaciones->pluck('mesa.codigo')->all();
+    }
+
+    /**
+     * @return Builder<Pedido>
+     */
+    private function pedidosVivos(Cuenta $cuenta): Builder
+    {
+        return Pedido::withoutGlobalScopes()->where('cuenta_id', $cuenta->id)->where('estado', '!=', 'cancelado');
+    }
+
+    /**
+     * Pasa los pedidos de $desde al final de $hacia. Devuelve cuántos movió.
+     */
+    private function moverRondas(User $actor, Cuenta $desde, Cuenta $hacia): int
+    {
+        $pedidos = Pedido::withoutGlobalScopes()->where('cuenta_id', $desde->id)->orderBy('ronda')->orderBy('id')->get();
+        $base = (int) Pedido::withoutGlobalScopes()->where('cuenta_id', $hacia->id)->max('ronda');
+
+        foreach ($pedidos->values() as $indice => $pedido) {
+            $anterior = $pedido->ronda;
+            $pedido->forceFill(['cuenta_id' => $hacia->id, 'ronda' => $base + $indice + 1])->save();
+            $this->historialPedido($pedido, $actor, $pedido->estado, $pedido->estado,
+                "Pasó a la cuenta #{$hacia->numero} como ronda {$pedido->ronda}. Era la ronda {$anterior} de la cuenta #{$desde->numero}.");
+        }
+
+        return $pedidos->count();
+    }
+
+    private function historialPedido(Pedido $pedido, User $actor, string $anterior, string $nuevo, string $nota): void
+    {
+        PedidoHistorial::create([
+            'pedido_id' => $pedido->id,
+            'estado_anterior' => $anterior,
+            'estado_nuevo' => $nuevo,
+            'user_id' => $actor->id,
+            'nota' => mb_substr($nota, 0, 255),
+        ]);
     }
 
     private function subirVersion(Cuenta $cuenta): void

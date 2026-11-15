@@ -61,6 +61,7 @@ class Cuenta extends Model
             'version' => 'integer',
             'comensales' => 'integer',
             'abierta_at' => 'datetime',
+            'precuenta_at' => 'datetime',
             'cerrada_at' => 'datetime',
             'anulada_at' => 'datetime',
         ];
@@ -74,6 +75,17 @@ class Cuenta extends Model
     public function estaAbierta(): bool
     {
         return in_array($this->estado, self::ESTADOS_ABIERTOS, true);
+    }
+
+    /**
+     * «Mesa 4» o «Mesa 4 + 5», con las mesas que ocupa ahora (ocupacionesAbiertas.mesa cargada).
+     * Vacío si ya no ocupa mesas (cerrada, anulada o fusionada).
+     */
+    public function mesasTexto(): string
+    {
+        $codigos = $this->ocupacionesAbiertas->pluck('mesa.codigo')->filter()->values();
+
+        return $codigos->isEmpty() ? '' : 'Mesa '.$codigos->implode(' + ');
     }
 
     public function estadoEtiqueta(): string
@@ -135,6 +147,16 @@ class Cuenta extends Model
     public function fusionadaEn(): BelongsTo
     {
         return $this->belongsTo(self::class, 'fusionada_en_id');
+    }
+
+    /**
+     * Las rondas de la cuenta, en orden. Cada ronda es un pedido tipo salon.
+     *
+     * @return HasMany<Pedido, $this>
+     */
+    public function pedidos(): HasMany
+    {
+        return $this->hasMany(Pedido::class)->orderBy('ronda');
     }
 
     /**

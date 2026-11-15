@@ -80,6 +80,11 @@ class CuentasTest extends TestCase
     {
         $metodo = $ruta === 'mesas.agregar' ? 'postJson' : 'patchJson';
 
+        // Cerrar lleva el total que se ve: estas cuentas no tienen pedidos, así que es 0.
+        if ($ruta === 'cerrar') {
+            $datos += ['total_centimos' => 0];
+        }
+
         return $this->{$metodo}(route('panel.mesas.cuentas.'.$ruta, $cuenta), ['version' => $version ?? $cuenta->fresh()->version, ...$datos]);
     }
 
@@ -607,11 +612,11 @@ class CuentasTest extends TestCase
         $cuenta = $this->abrir(['1']);
         $this->operar('mesas.agregar', $cuenta, ['mesa_id' => $this->mesas['2']->id])->assertOk();
 
-        $this->patch(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1])
+        $this->patch(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 1, 'total_centimos' => 0])
             ->assertRedirect(route('panel.mesas.index'))
             ->assertSessionHas('error', GestionarCuentas::MENSAJE_DESACTUALIZADA);
 
-        $this->patch(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 2])
+        $this->patch(route('panel.mesas.cuentas.cerrar', $cuenta), ['version' => 2, 'total_centimos' => 0])
             ->assertRedirect(route('panel.mesas.index'))
             ->assertSessionHas('status', 'Se cerró la cuenta #1 y sus mesas quedaron disponibles.');
     }

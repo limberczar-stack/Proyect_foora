@@ -44,7 +44,7 @@ class PedidoController extends Controller
 
         $filtros = $request->validate([
             'estado' => ['nullable', Rule::in(array_keys($pestanas))],
-            'tipo' => ['nullable', Rule::in(['delivery', 'recojo'])],
+            'tipo' => ['nullable', Rule::in(['delivery', 'recojo', 'salon'])],
             'q' => ['nullable', 'string', 'max:60'],
             'pedido' => ['nullable', 'integer'],
         ]);
@@ -55,7 +55,7 @@ class PedidoController extends Controller
         $inicioHoy = $this->inicioDeHoy($usuario);
 
         $pedidos = $this->base($usuario)
-            ->with('metodoPago')
+            ->with(['metodoPago', ...Pedido::RELACIONES_SALON])
             ->where('estado', $estado)
             ->when(in_array($estado, ['entregado', 'cancelado'], true), fn (Builder $query) => $query->where($estado === 'entregado' ? 'entregado_at' : 'cancelado_at', '>=', $inicioHoy))
             ->when($tipo, fn (Builder $query) => $query->where('tipo', $tipo))
@@ -112,7 +112,9 @@ class PedidoController extends Controller
             'en_preparacion' => 'aceptado.',
             'listo' => 'listo.',
             'en_camino' => 'en camino.',
-            'entregado' => $actualizado->tipo === 'recojo' ? 'recogido.' : 'entregado.',
+            'entregado' => match ($actualizado->tipo) {
+                'recojo' => 'recogido.', 'salon' => 'servido.', default => 'entregado.'
+            },
             default => 'cancelado.',
         };
 
@@ -142,14 +144,18 @@ class PedidoController extends Controller
         $usuario = $request->user();
         $datos = $request->validate([
             'desde' => ['required', 'integer', 'min:0'],
-            'tipo' => ['nullable', Rule::in(['delivery', 'recojo'])],
+            'tipo' => ['nullable', Rule::in(['delivery', 'recojo', 'salon'])],
         ]);
 
+        // Una ronda de salón suena en la cocina, no como «pedido nuevo» en el panel del cajero.
         $nuevos = $this->base($usuario)
             ->where('id', '>', $datos['desde'])
+            ->when($usuario->rol !== 'cocina', fn (Builder $query) => $query->where('tipo', '!=', 'salon'))
             ->orderBy('id')
             ->limit(self::NOVEDADES_MAXIMAS)
-            ->get(['id', 'numero', 'nombre_cliente', 'tipo', 'estado', 'total']);
+            ->with(Pedido::RELACIONES_SALON)
+            ->get(['id', 'numero', 'nombre_cliente', 'tipo', 'estado', 'total', 'cuenta_id', 'ronda', 'creado_por']);
+        $conMontos = $usuario->can('verMontos', Pedido::class);
 
         return response()->json([
             'contadores' => $this->contadores($usuario, $datos['tipo'] ?? null),
@@ -158,10 +164,10 @@ class PedidoController extends Controller
             'nuevos' => $nuevos->map(fn (Pedido $pedido): array => [
                 'id' => $pedido->id,
                 'numero' => $pedido->numero,
-                'cliente' => $pedido->primerNombre(),
+                'cliente' => $pedido->esSalon() ? $pedido->etiqueta() : $pedido->primerNombre(),
                 'tipo' => $pedido->tipoTexto(),
                 'estado' => Pedido::ESTADOS[$pedido->estado],
-                'total' => $pedido->total,
+                ...($conMontos ? ['total' => $pedido->total] : []),
             ])->all(),
         ]);
     }
@@ -177,7 +183,7 @@ class PedidoController extends Controller
 
     private function paraDetalle(Pedido $pedido): Pedido
     {
-        return $pedido->load(['items.opciones', 'historial.user', 'metodoPago', 'restaurante']);
+        return $pedido->load(['items.opciones', 'historial.user', 'metodoPago', 'restaurante', ...Pedido::RELACIONES_SALON]);
     }
 
     /**

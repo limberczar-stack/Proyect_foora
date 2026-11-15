@@ -45,16 +45,36 @@ class PedidoPolicy
             return false;
         }
 
-        return $this->gestiona($user) || ($user->rol === 'cocina' && $pedido->estado === 'en_preparacion' && $destino === 'listo');
-    }
+        if ($this->gestiona($user)) {
+            return true;
+        }
 
-    public function revisarPago(User $user, Pedido $pedido): bool
-    {
-        return $this->gestiona($user) && $this->esDeSuRestaurante($user, $pedido);
+        if ($user->rol === 'cocina') {
+            return $pedido->estado === 'en_preparacion' && $destino === 'listo';
+        }
+
+        // El mesero sirve las rondas de salón que la cocina dejó listas.
+        return $user->rol === 'mesero' && $pedido->esSalon() && $pedido->estado === 'listo' && $destino === 'entregado';
     }
 
     /**
-     * Teléfono, dirección y botones de contacto.
+     * Una ronda de salón no tiene pago propio: se cobra por cuenta.
+     */
+    public function revisarPago(User $user, Pedido $pedido): bool
+    {
+        return $this->gestiona($user) && $this->esDeSuRestaurante($user, $pedido) && ! $pedido->esSalon();
+    }
+
+    /**
+     * Precios, subtotales y totales. La cocina nunca los recibe, en ningún tipo de pedido.
+     */
+    public function verMontos(User $user): bool
+    {
+        return $this->gestiona($user);
+    }
+
+    /**
+     * Teléfono, dirección y botones de contacto. Una ronda de salón no tiene cliente.
      */
     public function verContacto(User $user, Pedido $pedido): bool
     {

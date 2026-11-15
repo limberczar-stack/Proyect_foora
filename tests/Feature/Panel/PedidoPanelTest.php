@@ -387,7 +387,10 @@ class PedidoPanelTest extends TestCase
         $estados = Pedido::withoutGlobalScopes()->where('restaurante_id', $buenSabor->id)->pluck('estado')->unique()->sort()->values()->all();
 
         $this->assertSame(['cancelado', 'en_camino', 'en_preparacion', 'entregado', 'listo', 'nuevo'], $estados);
-        $this->assertSame(range(1, 12), Pedido::withoutGlobalScopes()->where('restaurante_id', $buenSabor->id)->orderBy('numero')->pluck('numero')->all());
+        // 12 pedidos de la vitrina y, a continuación, las 4 rondas de salón demo: la secuencia es una sola.
+        $this->assertSame(range(1, 16), Pedido::withoutGlobalScopes()->where('restaurante_id', $buenSabor->id)->orderBy('numero')->pluck('numero')->all());
+        $this->assertSame(12, Pedido::withoutGlobalScopes()->where('restaurante_id', $buenSabor->id)->where('tipo', '!=', 'salon')->count());
+        $this->assertSame([13, 14, 15, 16], Pedido::withoutGlobalScopes()->where('restaurante_id', $buenSabor->id)->where('tipo', 'salon')->orderBy('numero')->pluck('numero')->all());
         $this->assertTrue(User::where('email', 'cocina@foora.test')->where('rol', 'cocina')->exists());
 
         $this->actingAs(User::where('email', 'admin@foora.test')->first())

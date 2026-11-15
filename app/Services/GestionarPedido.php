@@ -136,6 +136,13 @@ class GestionarPedido
 
     private function entregar(Pedido $pedido, User $usuario, bool $cobrado): ?string
     {
+        // Salón: se sirve; el pago es de la cuenta y se marca al cerrarla.
+        if ($pedido->esSalon()) {
+            $pedido->entregado_at = now();
+
+            return 'Servido.';
+        }
+
         if ($pedido->estado_pago === 'por_verificar') {
             throw ValidationException::withMessages(['cobrado' => 'Valida o rechaza el pago antes de entregar el pedido.']);
         }

@@ -12,6 +12,7 @@ use App\Http\Controllers\Panel\MesaController;
 use App\Http\Controllers\Panel\MiCuentaController;
 use App\Http\Controllers\Panel\MiSuscripcionController;
 use App\Http\Controllers\Panel\PedidoController;
+use App\Http\Controllers\Panel\PedidoSalonController;
 use App\Http\Controllers\Panel\ProductoController;
 use App\Http\Controllers\Panel\Superadmin\RestauranteController;
 use App\Http\Controllers\Panel\Superadmin\ResumenController;
@@ -131,6 +132,16 @@ Route::middleware(['auth', 'panel', 'local.operativo'])->prefix('panel')->name('
             Route::patch('mesero', [CuentaController::class, 'transferir'])->name('transferir');
             Route::patch('cerrar', [CuentaController::class, 'cerrar'])->name('cerrar');
             Route::patch('anular', [CuentaController::class, 'anular'])->name('anular');
+
+            // Rondas (pedidos de salón): permisos en CuentaPolicy, reglas en CrearPedidoSalon y GestionarPedidoSalon.
+            Route::get('pedido', [PedidoSalonController::class, 'create'])->name('pedido.create');
+            Route::post('pedido/validar', [PedidoSalonController::class, 'validar'])->middleware('throttle:120,1')->name('pedido.validar');
+            Route::post('pedido', [PedidoSalonController::class, 'store'])->name('pedido.store');
+            Route::patch('pedidos/{pedido}/servir', [PedidoSalonController::class, 'servir'])->whereNumber('pedido')->name('pedidos.servir');
+            Route::patch('pedidos/{pedido}/cancelar', [PedidoSalonController::class, 'cancelarRonda'])->whereNumber('pedido')->name('pedidos.cancelar');
+            Route::patch('lineas/{item}/anular', [PedidoSalonController::class, 'anularLinea'])->whereNumber('item')->name('lineas.anular');
+            Route::patch('precuenta', [PedidoSalonController::class, 'precuenta'])->name('precuenta');
+            Route::get('precuenta', [PedidoSalonController::class, 'imprimir'])->name('precuenta.imprimir');
         });
 
         Route::post('areas', [AreaController::class, 'store'])->name('areas.store');

@@ -35,7 +35,7 @@ class ResumenInicio
      * @return array{
      *     fecha: string,
      *     zonaHoraria: string,
-     *     tarjetas: array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, activos: int, nuevos: int},
+     *     tarjetas: array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, cuentasHoy: int, activos: int, nuevos: int},
      *     mesas: array{ocupadas: int, total: int}|null,
      *     tienePedidos: bool,
      *     recientes: Collection<int, Pedido>,
@@ -66,7 +66,7 @@ class ResumenInicio
     }
 
     /**
-     * @return array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, activos: int, nuevos: int}
+     * @return array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, cuentasHoy: int, activos: int, nuevos: int}
      */
     private function tarjetas(Restaurante $restaurante): array
     {
@@ -79,11 +79,25 @@ class ResumenInicio
             ->where('estado', '!=', 'cancelado')
             ->count();
 
+        // Delivery y recojo venden al entregarse. Una ronda de salón vende cuando su cuenta se cierra
+        // hoy, no al servirse; las de cuentas anuladas (ya canceladas) no cuentan.
         $ventas = $this->pedidos($restaurante)
+            ->where('tipo', '!=', 'salon')
             ->where('estado', 'entregado')
             ->where('entregado_at', '>=', $inicio)
             ->where('entregado_at', '<', $fin)
             ->selectRaw('count(*) as entregados, coalesce(sum(total), 0) as ventas')
+            ->toBase()
+            ->first();
+
+        $salon = $this->pedidos($restaurante)
+            ->where('pedidos.tipo', 'salon')
+            ->where('pedidos.estado', '!=', 'cancelado')
+            ->join('cuentas', 'cuentas.id', '=', 'pedidos.cuenta_id')
+            ->where('cuentas.estado', 'cerrada')
+            ->where('cuentas.cerrada_at', '>=', $inicio)
+            ->where('cuentas.cerrada_at', '<', $fin)
+            ->selectRaw('count(distinct cuentas.id) as cuentas, coalesce(sum(pedidos.total), 0) as ventas')
             ->toBase()
             ->first();
 
@@ -96,8 +110,9 @@ class ResumenInicio
 
         return [
             'pedidosHoy' => $pedidosHoy,
-            'ventasHoy' => (float) $ventas->ventas,
+            'ventasHoy' => (round((float) $ventas->ventas * 100) + round((float) $salon->ventas * 100)) / 100,
             'entregadosHoy' => (int) $ventas->entregados,
+            'cuentasHoy' => (int) $salon->cuentas,
             'activos' => (int) $activos->sum(),
             'nuevos' => (int) ($activos['nuevo'] ?? 0),
         ];
@@ -131,7 +146,7 @@ class ResumenInicio
     private function recientes(Restaurante $restaurante): Collection
     {
         return $this->pedidos($restaurante)
-            ->with('metodoPago')
+            ->with(['metodoPago', ...Pedido::RELACIONES_SALON])
             ->latest()
             ->latest('id')
             ->limit(self::PEDIDOS_RECIENTES)
@@ -256,7 +271,7 @@ class ResumenInicio
      */
     private function pedidos(Restaurante $restaurante): Builder
     {
-        return Pedido::query()->where('restaurante_id', $restaurante->id);
+        return Pedido::query()->where('pedidos.restaurante_id', $restaurante->id);
     }
 
     /**

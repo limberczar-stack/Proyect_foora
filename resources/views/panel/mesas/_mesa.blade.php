@@ -8,9 +8,10 @@
      * - Fuera de servicio (o reservada, más adelante): no se toca.
      *
      * @var \App\Models\Mesa $mesa
-     * @var array{cuenta_id: int, numero: int, version: int, tiempo: string, minutos: int, comensales: int, mesero: ?string, grupo: ?string, demorada: bool}|null $cuenta
+     * @var array{cuenta_id: int, numero: int, version: int, tiempo: string, minutos: int, comensales: int, mesero: ?string, grupo: ?string, demorada: bool, total_centimos: int, listas: int, precuenta: bool}|null $cuenta
      */
     $horas = \App\Services\GestionarCuentas::HORAS_PARA_RESALTAR;
+    $soles = fn (int $centimos): string => "S/\u{00A0}".number_format($centimos / 100, 2);
 @endphp
 
 @if ($mesa->estado === 'ocupada' && $cuenta !== null)
@@ -31,6 +32,17 @@
         @endif
         @if ($cuenta['grupo'])
             <span class="font-medium" data-mesa-grupo>{{ $cuenta['grupo'] }}</span>
+        @endif
+        @if ($cuenta['total_centimos'] > 0)
+            <span class="num font-semibold" data-mesa-total>{{ $soles($cuenta['total_centimos']) }}</span>
+        @endif
+        @if ($cuenta['precuenta'])
+            <span class="font-medium text-brand-800" data-mesa-precuenta>Precuenta pedida</span>
+        @endif
+        @if ($cuenta['listas'] > 0)
+            <span class="inline-flex w-fit items-center gap-1 rounded-full bg-success-fill px-2 py-0.5 font-semibold text-white" data-mesa-listo>
+                <x-icon name="check" :size="12" /> Listo para servir
+            </span>
         @endif
     </x-mesa>
 @elseif ($mesa->estado === 'disponible' && ($puedeAtender ?? true))

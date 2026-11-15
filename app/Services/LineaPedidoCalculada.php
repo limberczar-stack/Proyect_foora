@@ -21,4 +21,27 @@ readonly class LineaPedidoCalculada
         public string $precioUnitario,
         public string $subtotal,
     ) {}
+
+    /**
+     * Una línea revisada tal como la recibe el navegador: válida o con sus errores.
+     *
+     * @param  list<string>  $errores
+     * @return array{valida: bool, errores: list<string>, nombre: ?string, variante_nombre: ?string, opciones: list<array{grupo_nombre: string, nombre: string, precio_extra: string}>, precio_unitario: ?string, subtotal: ?string}
+     */
+    public static function paraNavegador(?self $linea, array $errores): array
+    {
+        return [
+            'valida' => $linea !== null,
+            'errores' => $errores,
+            'nombre' => $linea?->nombre,
+            'variante_nombre' => $linea?->varianteNombre,
+            'opciones' => array_map(fn (array $opcion): array => [
+                'grupo_nombre' => $opcion['grupo_nombre'],
+                'nombre' => $opcion['nombre'],
+                'precio_extra' => $opcion['precio_extra'],
+            ], $linea->opciones ?? []),
+            'precio_unitario' => $linea?->precioUnitario,
+            'subtotal' => $linea?->subtotal,
+        ];
+    }
 }

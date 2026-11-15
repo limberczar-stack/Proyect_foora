@@ -69,6 +69,14 @@ class Pedido extends Model
         'otro' => 'Otro motivo',
     ];
 
+    /**
+     * Relaciones que necesita etiqueta() sin consultas por pedido: cárgalas en cualquier listado
+     * que pueda incluir rondas de salón.
+     *
+     * @var list<string>
+     */
+    public const RELACIONES_SALON = ['cuenta:id,numero,estado', 'cuenta.ocupacionesAbiertas.mesa:id,codigo', 'creadoPor:id,name'];
+
     /** Versión vigente del aviso de privacidad que acepta el cliente. */
     public const CONSENTIMIENTO_VERSION = '2026-11-v1';
 
@@ -132,6 +140,7 @@ class Pedido extends Model
     {
         return [
             'numero' => 'integer',
+            'ronda' => 'integer',
             'latitud' => 'decimal:7',
             'longitud' => 'decimal:7',
             'pago_validado_at' => 'datetime',
@@ -162,14 +171,61 @@ class Pedido extends Model
         $query->whereNotIn('estado', ['entregado', 'cancelado']);
     }
 
+    /**
+     * Una ronda de una cuenta de salón: sin cliente ni método de pago, se cobra por cuenta.
+     */
+    public function esSalon(): bool
+    {
+        return $this->tipo === 'salon';
+    }
+
+    /**
+     * Primer nombre del cliente. Vacío en los pedidos de salón, que no tienen cliente.
+     */
     public function primerNombre(): string
     {
-        return strtok(trim($this->nombre_cliente), " \t") ?: '';
+        return strtok(trim((string) $this->nombre_cliente), " \t") ?: '';
     }
 
     public function tipoTexto(): string
     {
-        return $this->tipo === 'delivery' ? 'Delivery a domicilio' : 'Recojo en local';
+        return match ($this->tipo) {
+            'delivery' => 'Delivery a domicilio',
+            'salon' => 'Salón',
+            default => 'Recojo en local',
+        };
+    }
+
+    /**
+     * Tipo en una palabra, para listas y tarjetas.
+     */
+    public function tipoCorto(): string
+    {
+        return match ($this->tipo) {
+            'delivery' => 'Delivery',
+            'salon' => 'Salón',
+            default => 'Recojo',
+        };
+    }
+
+    /**
+     * Quién es el pedido en una línea: el cliente, o en salón «Mesa 4 + 5 · Ronda 2 · Luis».
+     * En salón usa RELACIONES_SALON; cárgalas antes en los listados.
+     */
+    public function etiqueta(): string
+    {
+        if (! $this->esSalon()) {
+            return (string) $this->nombre_cliente;
+        }
+
+        $mesas = $this->cuenta?->mesasTexto();
+        $partes = [
+            $mesas !== null && $mesas !== '' ? $mesas : 'Cuenta #'.($this->cuenta?->numero ?? '?'),
+            $this->ronda !== null ? "Ronda {$this->ronda}" : null,
+            $this->creadoPor ? strtok(trim($this->creadoPor->name), ' ') : null,
+        ];
+
+        return implode(' · ', array_filter($partes));
     }
 
     public function puedePasarA(string $destino): bool
@@ -239,6 +295,16 @@ class Pedido extends Model
     public function mesa(): BelongsTo
     {
         return $this->belongsTo(Mesa::class);
+    }
+
+    /**
+     * La cuenta de salón a la que pertenece esta ronda (null en delivery y recojo).
+     *
+     * @return BelongsTo<Cuenta, $this>
+     */
+    public function cuenta(): BelongsTo
+    {
+        return $this->belongsTo(Cuenta::class);
     }
 
     /**

@@ -8,10 +8,11 @@ SaaS multi-tenant para restaurantes de Perú (suscripción mensual por local, si
 - **Inicio del panel** (`InicioController`, `ResumenInicio`): admin y cajero ven el resumen real del día, pedidos recientes y alertas (y la tarjeta "Mesas ocupadas x/total" si el local tiene Mesas); solo el admin ve Primeros pasos. Cocina va a sus pedidos. El mesero va a `panel/mesas` si su local tiene Mesas; si no, él y el repartidor reciben una página (200) que les dice que aún no tienen módulos. Las reglas de cada tarjeta están en `ResumenInicio`.
 - **Carta:** categorías, productos, variantes, grupos de opciones, combos y disponibilidad.
 - **Vitrina pública** (`/{slug}`): carta, carrito, pedido sin login, seguimiento por código.
-- **Panel de pedidos:** estados, revisión de pagos Yape/Plin, actualización en vivo y control de concurrencia.
+- **Panel de pedidos:** estados, revisión de pagos Yape/Plin, actualización en vivo y control de concurrencia. Filtro "Salón" (con el módulo Mesas). **La cocina nunca recibe montos** de ningún pedido: ni en la lista, ni en el detalle, ni en `novedades` (`PedidoPolicy::verMontos`).
 - **Configuración:** general, horario, pago, pedidos, notificaciones, usuarios, Mi cuenta y abrir/cerrar local.
 - **Mesas (fase A de `docs/FOORA_v1.1_salon_y_ventas.md`):** áreas y mesas, "Agregar varias" con prefijo, límite `planes.max_mesas`. Solo el admin gestiona, en `panel/mesas?editar=1` ("Editar salón", vista `gestion.blade.php`); ahí ve también lo desactivado.
-- **Cuentas de salón (fase B1):** `panel/mesas` es el plano para atender (admin, cajero y mesero; cocina y repartidor, 403). Tocar una mesa disponible abre una cuenta (se pueden unir hasta 10 mesas de cualquier área); tocar una ocupada abre su detalle con las acciones: agregar, quitar y mover mesa, unir con otra cuenta, transferir, cerrar ("Cobrado en otro sistema") y anular con motivo. Cerrar es de admin y cajero; anular también, y el mesero solo una cuenta suya. El plano se actualiza cada 10 s (`resources/js/salon.js`, `panel.mesas.plano`) y resalta las cuentas con más de 6 horas. Aún sin pedidos de salón, precuenta, ventas ni comprobantes.
+- **Cuentas de salón (fase B1):** `panel/mesas` es el plano para atender (admin, cajero y mesero; cocina y repartidor, 403). Tocar una mesa disponible abre una cuenta (se pueden unir hasta 10 mesas de cualquier área); tocar una ocupada abre su detalle con las acciones: agregar, quitar y mover mesa, unir con otra cuenta, transferir, cerrar ("Cobrado en otro sistema") y anular con motivo. Cerrar es de admin y cajero; anular también, y el mesero solo una cuenta suya sin pedidos vivos. El plano se actualiza cada 10 s (`resources/js/salon.js`, `panel.mesas.plano`), muestra el monto y "Listo para servir", y resalta las cuentas con más de 6 horas.
+- **Pedidos de salón (fase B2):** cada envío a cocina es una **ronda**: un pedido `tipo = salon`, `origen = local`, con `cuenta_id` y `ronda`. El mesero toma el pedido en `panel/mesas/cuentas/{cuenta}/pedido` (carta de la vitrina, borrador en `localStorage` por cuenta). En el detalle de la cuenta: rondas, total, "Agregar más", Servido, anular línea y cancelar ronda (admin y cajero, con motivo), precuenta imprimible de 80 mm. Cerrar pide el total que se veía y confirma las rondas sin servir. Aún sin ventas, caja ni comprobantes.
 - **Superadmin:** alta de locales, planes, pagos manuales, anulación, cancelación, suspensión, notas internas, módulos por local y resumen.
 - **Suscripción del local:** Mi suscripción (solo lectura), avisos con contacto de FOORA y modo solo lectura fuera de operación.
 - **Auditoría:** `actividad_log` se escribe en todo cambio; aún no tiene pantalla.
@@ -21,13 +22,22 @@ SaaS multi-tenant para restaurantes de Perú (suscripción mensual por local, si
 - **Multi-tenant:** `App\Models\Concerns\BelongsToRestaurante` filtra por el `restaurante_id` del usuario con sesión. No filtra sin sesión, ni para superadmin.
 - **Rutas públicas:** no hay sesión, así que el scope no protege. Filtra siempre explícito por `restaurante_id` y quita el scope a propósito (ver `CartaPublica`, `PedidoPublicoController`).
 - **`Restaurante::operativo()`:** única regla de si el local opera (no suspendido, no cancelada, gracia sin pasar). Sale de las fechas, no depende del comando diario. No confundir con `abiertoAhora()`.
-- **`EnsureLocalOperativo`** (`local.operativo`): fuera de operación solo deja escrituras de pedidos en curso, cerrar o anular cuentas de salón ya abiertas (no abrir ni modificarlas), abrir/cerrar y la propia cuenta.
+- **`EnsureLocalOperativo`** (`local.operativo`): fuera de operación solo deja escrituras de pedidos en curso, servir rondas y cerrar o anular cuentas de salón ya abiertas (no abrir cuentas, modificarlas, enviar rondas, anular líneas ni pedir precuenta), abrir/cerrar y la propia cuenta.
 - La vitrina y `CrearPedido` también revisan `operativo()`.
+- **Pedidos sin cliente:** `nombre_cliente`, `telefono_cliente` y `metodo_pago_id` son nullable en la base por los pedidos de salón; `PedidoRequest` los sigue exigiendo en la vitrina (`PedidoPublicoCamposTest`). Usa `Pedido::etiqueta()` y `tipoCorto()` en vez de leer `nombre_cliente`, y carga `Pedido::RELACIONES_SALON` en los listados. Un pedido de salón nunca sale por el seguimiento público (404).
 - **Módulos por local:** los de `Modulos::POR_LOCAL` (hoy solo `mesas`) exigen tres cosas: `foora.modulos`, que el superadmin lo encienda en el local (`restaurantes.modulos`, JSON; `Restaurante::tieneModulo()`) y que exista su ruta. Pregunta siempre con `Modulos::activoPara($modulo, $restaurante)`, no con `activo()` ni `tieneModulo()` solos. El middleware `modulo:mesas` (`EnsureModuloActivo`) responde 404 si está apagado. `modulos` no está en `$fillable`: solo lo cambia el superadmin (detalle del restaurante, auditado en `suscripciones`). La clave `mesas` cubrirá también la fase B (cuentas y mesero): **no crees otra clave**.
 
 ### Servicios clave (`app/Services`)
 
-- `CrearPedido`: transacción con la fila del restaurante bloqueada (correlativo, idempotencia, límite por teléfono).
+- `CrearPedido`: transacción con la fila del restaurante bloqueada (correlativo, idempotencia, límite por teléfono). `guardarItems()` es público y estático: lo comparte `CrearPedidoSalon`.
+- `CrearPedidoSalon`: envía una ronda con el **mismo bloqueo del restaurante**, así que el número del pedido sale de la misma secuencia que la vitrina y una ronda nunca entra en una cuenta que se está cerrando.
+  - Entra directo a `en_preparacion`, pago `pendiente`, sin delivery; no exige local abierto ni pedido mínimo; no crea `pedido_nuevo` ni suma al badge.
+  - Exige local operativo y módulo activo. Solo en cuentas `abierta` o `precuenta`; si no, 409.
+  - Una clave de idempotencia repetida devuelve la misma ronda; usada en otra cuenta o en un pedido público, 409.
+  - Una línea inválida (agotada, ajena, cantidad fuera de 1 a 50) responde 422 con la clave `lineas.{n}`, para que el borrador marque esa línea. Límites: 30 líneas y 200 caracteres de observación, como el carrito público.
+  - **Las rondas no suben `cuentas.version`.** Sobre una cuenta en precuenta, la devuelven a `abierta` y resuelven la alerta `precuenta_pedida`.
+  - Quién envió la ronda va en `pedidos.creado_por` (no hay `mesero_id` en pedidos). `pedidos.mesa_id` no se usa en salón: las mesas salen de la cuenta.
+- `GestionarPedidoSalon`: servir (`listo → entregado`, etiqueta "Servido"), anular una línea (marca `anulado_at`, recalcula el pedido y, si no quedan líneas, lo cancela), cancelar una ronda sin servir y pedir la precuenta (sube `version`, crea `precuenta_pedida`; pedirla otra vez no la duplica).
 - `CalculadorLineaPedido`: valida y calcula en céntimos. Los precios salen de la BD, nunca del cliente.
 - `GestionarPedido`: cambios de estado y de pago con la fila bloqueada; conflicto da 409. **No existe clase `TransicionPedido`:** las reglas están en `Pedido::TRANSICIONES` y `Pedido::puedePasarA()`, y las prueba `TransicionPedidoTest`.
 - `SeguimientoPedido`: datos públicos del seguimiento; nunca incluye `cancelacion_detalle`.
@@ -49,9 +59,15 @@ SaaS multi-tenant para restaurantes de Perú (suscripción mensual por local, si
   - Nada se borra: cerrar, anular y fusionar dejan la cuenta y sus ocupaciones como historial. Mover y fusionar cierran la ocupación vieja y crean otra.
   - `ocupaciones_mesa` es "las mesas de una cuenta": `personas`, `mesero_id` y `consumo_total` no se usan (comensales y mesero viven en `cuentas`).
   - Tope de 10 mesas por cuenta (también al agregar y fusionar); al fusionar se suman los comensales (tope 99) y queda el mesero de la primera.
-  - `bloquearRestaurante()` es `protected` solo para que el control negativo de `tests/Concurrencia/cuentas.php` ejecute el mismo código sin bloqueo.
+  - `bloquearRestaurante()` es `protected` (también en `CrearPedidoSalon`) solo para que los controles negativos de `tests/Concurrencia/` ejecuten el mismo código sin bloqueo.
+  - Con rondas:
+    - **Cerrar** recibe el total en céntimos que veía quien cierra; si no coincide con `totalCentimos()`, 409. Con rondas sin servir lanza `RondasSinServir` (409 con la lista) hasta que se confirme: entonces las marca servidas. Todo pedido no cancelado queda `pagado`.
+    - **Anular** con pedidos vivos solo lo hacen admin o cajero: cancela todos, también los servidos, y deja una entrada en `pedido_historial` por pedido.
+    - **Fusionar** pasa los pedidos de la segunda al final de la primera (1–2 y 1–3 quedan 1–5) sin renumerar los de la primera.
+  - Total de la cuenta = suma de sus pedidos no cancelados, siempre en el servidor (`GestionarCuentas::totalCentimos`).
   - Desactivar a un usuario con cuentas abiertas no se bloquea: `UsuarioController::estado` devuelve un `aviso` con el conteo.
-- `PlanoMesas`: lo que pinta el plano y su actualización en vivo, con un número fijo de consultas (lo prueba `PlanoMesasTest`). `panel.mesas._mesa` debe pintar igual en la página y en `panel.mesas.plano`.
+- `PlanoMesas`: lo que pinta el plano y su actualización en vivo, con un número fijo de consultas (lo prueban `PlanoMesasTest` y `GestionRondasTest`, igual que el detalle de la cuenta). `panel.mesas._mesa` debe pintar igual en la página y en `panel.mesas.plano`.
+- `ResumenInicio`: "Ventas de hoy" suma delivery y recojo entregados hoy, más las rondas no canceladas de cuentas **cerradas hoy** (no al servirse; las de cuentas anuladas ya están canceladas).
 - `GestionarUsuarios`, `RegistrarActividad` (quita contraseñas y tokens de la auditoría).
 - `App\Support\ContactoFoora` y `WhatsApp`: enlaces wa.me (solo celulares peruanos) y mailto.
 
@@ -71,7 +87,7 @@ El local y el público nunca ven motivos de suspensión, cancelación o anulaci�
 - En pruebas de un módulo por local, crea el restaurante con `Restaurante::factory()->conModulos('mesas')`.
 - Fechas de negocio en la zona del local: `Restaurante::fechaHoy()`.
 - Respuestas AJAX: JSON con `mensaje`; sin JavaScript, redirección con `status` o `error`.
-- JS con jQuery por módulo en `resources/js`; la vitrina tiene entrada propia para no cargar el JS del panel.
+- JS con jQuery por módulo en `resources/js`; la vitrina tiene entrada propia para no cargar el JS del panel. Lo que comparten la vitrina y la toma de pedidos del salón está en `resources/js/carta/` (búsqueda, hojas, detalle de producto, utilidades) y en los parciales `vitrina._carta`, `vitrina._productos` y `vitrina._hoja_producto`. **No cambies las claves de `localStorage` de la vitrina** (`foora.carrito.v1.{slug}`, `foora.pedido.v1.{slug}`): hay carritos guardados en los celulares.
 - Reusa los componentes de `resources/views/components` (`x-button`, `x-card`, `x-input`, `x-table`, etc.).
 - Config propia en `config/foora.php`; lee `env()` solo en `config/`.
 - Pagos y logs no se borran: se anula con una marca.
@@ -90,16 +106,17 @@ php artisan db:seed --class=DemoSeeder        # datos demo; bloqueado en producc
 php artisan foora:revisar-suscripciones       # programado 00:10 hora de Lima
 php tests/Concurrencia/limite_mesas.php       # concurrencia de max_mesas; solo en la base foora_concurrencia
 php tests/Concurrencia/cuentas.php            # concurrencia de cuentas de salón (tarda unos minutos)
+php tests/Concurrencia/pedidos_salon.php      # concurrencia de rondas, cierre, numeración y fusión
 ```
 
-Usuarios demo (contraseña `password`): `superadmin@foora.test`, `admin@foora.test`, `cajero@foora.test`, `cocina@foora.test`, `mesero@foora.test`, `admin@labahia.test`, `admin@chifa.test`. Estados de suscripción: `admin@prueba.test`, `admin@aldia.test`, `admin@gracia.test`, `admin@fuera.test`. En la demo solo El Buen Sabor (`@foora.test`) tiene Mesas encendido: Salón principal y Terraza, 12 mesas y dos cuentas abiertas (mesas 4 + 5 unidas, y T2).
+Usuarios demo (contraseña `password`): `superadmin@foora.test`, `admin@foora.test`, `cajero@foora.test`, `cocina@foora.test`, `mesero@foora.test`, `admin@labahia.test`, `admin@chifa.test`. Estados de suscripción: `admin@prueba.test`, `admin@aldia.test`, `admin@gracia.test`, `admin@fuera.test`. En la demo solo El Buen Sabor (`@foora.test`) tiene Mesas encendido: Salón principal y Terraza, 12 mesas y dos cuentas abiertas: 4 + 5 con tres rondas (servida, lista y en preparación) y T2 con una ronda servida y la precuenta pedida. Volver a sembrar reinicia esas cuentas.
 
 Variables propias: `FOORA_CONTACTO_WHATSAPP` y `FOORA_CONTACTO_EMAIL`. Vacías, los avisos salen sin enlaces.
 
 ## Pendientes conocidos
 
 - **Sin construir:** Alertas, Reservas, Promociones, Actividad y Ayuda. Están ocultos: cada uno se enciende en `foora.modulos` y aparece en el menú cuando además existe su ruta (`App\Support\Modulos::RUTAS`).
-- **Salón (v1.1):** falta el resto de la fase B (tomar pedido, rondas, cocina, precuenta) y las siguientes (caja, comprobantes, reportes). En `cuentas` ya existen el estado `precuenta` y el cierre `venta`, pero nada llega a ellos todavía. Las cuentas abiertas por más de 6 horas solo se resaltan: no hay cierre automático. `x-mesa` está preparado para Reservada, que aún no se usa.
+- **Salón (v1.1):** faltan las fases C en adelante (caja, ventas, comprobantes, reportes). El cierre `venta` existe en `cuentas` pero nada llega a él todavía; "Cobrado en otro sistema" es el único cierre. Las cuentas abiertas por más de 6 horas solo se resaltan: no hay cierre automático. `x-mesa` está preparado para Reservada, que aún no se usa.
 - **Mesero sin Mesas y repartidor:** aún no tienen módulos asignados; su inicio solo lo explica.
 - **Configuración:** faltan Impresión, Integraciones y Seguridad. **Pedidos:** falta imprimir tickets.
 - **App del cliente:** sin empezar (registro, favoritos, explorar).
