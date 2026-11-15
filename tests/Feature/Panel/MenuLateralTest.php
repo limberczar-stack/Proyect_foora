@@ -6,6 +6,7 @@ use App\Models\Alerta;
 use App\Models\Pedido;
 use App\Models\Restaurante;
 use App\Models\User;
+use App\Support\Modulos;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Testing\TestResponse;
@@ -149,6 +150,8 @@ class MenuLateralTest extends TestCase
     public function test_a_hidden_module_stays_hidden_even_if_its_route_exists(): void
     {
         $this->registrarRuta('panel.mesas.index');
+        config(['foora.modulos.mesas' => false]);
+        $this->restaurante->forceFill(['modulos' => ['mesas']])->save();
 
         $this->assertStringNotContainsString('Mesas', $this->menu($this->actingAs($this->admin)->get(route('panel.inicio'))));
     }
@@ -172,6 +175,11 @@ class MenuLateralTest extends TestCase
     {
         $this->registrarRuta($ruta);
         config(["foora.modulos.{$modulo}" => true]);
+
+        // Los módulos por local (Mesas) además los enciende el superadmin en el restaurante.
+        if (isset(Modulos::POR_LOCAL[$modulo])) {
+            $this->restaurante->forceFill(['modulos' => [$modulo]])->save();
+        }
 
         $menu = $this->menu($this->actingAs($this->admin)->get(route('panel.inicio')));
 

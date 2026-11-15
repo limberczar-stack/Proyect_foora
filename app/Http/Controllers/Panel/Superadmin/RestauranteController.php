@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Panel\Superadmin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Superadmin\AltaRestauranteRequest;
 use App\Http\Requests\Superadmin\DatosRestauranteRequest;
+use App\Http\Requests\Superadmin\ModulosRequest;
 use App\Http\Requests\Superadmin\NotasInternasRequest;
 use App\Models\ActividadLog;
 use App\Models\Plan;
@@ -14,10 +15,12 @@ use App\Models\Suscripcion;
 use App\Models\SuscripcionPago;
 use App\Services\CrearRestaurante;
 use App\Services\RegistrarActividad;
+use App\Support\Modulos;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 
@@ -132,6 +135,7 @@ class RestauranteController extends Controller
             'rubros' => Rubro::orderBy('nombre')->get(['id', 'nombre']),
             'planes' => Plan::where('activo', true)->orderBy('precio_mensual')->get(),
             'metodos' => SuscripcionPago::METODOS,
+            'modulos' => Modulos::encendiblesPorLocal(),
         ]);
     }
 
@@ -163,6 +167,47 @@ class RestauranteController extends Controller
         }
 
         return $this->respuesta($request, 'Se guardaron las notas internas.');
+    }
+
+    /**
+     * Enciende o apaga los módulos por local (Modulos::POR_LOCAL). Los que aún no se pueden encender
+     * (apagados en foora.modulos) se conservan como estaban. Apagar un módulo no borra sus datos.
+     */
+    public function modulos(ModulosRequest $request, Restaurante $restaurante, RegistrarActividad $actividad): JsonResponse
+    {
+        $mensaje = DB::transaction(function () use ($request, $restaurante, $actividad): string {
+            $restaurante = Restaurante::lockForUpdate()->findOrFail($restaurante->id);
+            $encendibles = array_keys(Modulos::encendiblesPorLocal());
+            $antes = array_values($restaurante->modulos ?? []);
+
+            $despues = array_values(array_unique([
+                ...array_diff($antes, $encendibles),
+                ...$request->encendidos(),
+            ]));
+            sort($despues);
+
+            $encendidos = array_diff($despues, $antes);
+            $apagados = array_diff($antes, $despues);
+
+            if ($encendidos === [] && $apagados === []) {
+                return 'No hubo cambios en los módulos.';
+            }
+
+            $restaurante->forceFill(['modulos' => $despues === [] ? null : $despues])->save();
+
+            $nombre = fn (string $modulo): string => Modulos::POR_LOCAL[$modulo]['nombre'] ?? $modulo;
+            $descripcion = collect([
+                ...array_map(fn (string $m): string => 'encendió '.$nombre($m), $encendidos),
+                ...array_map(fn (string $m): string => 'apagó '.$nombre($m), $apagados),
+            ])->implode(', ');
+
+            $actividad->registrar($request->user(), 'suscripciones', 'cambio_modulos', 'Módulos del local: '.$descripcion.'.', $restaurante,
+                ['modulos' => $antes], ['modulos' => $despues], $restaurante);
+
+            return 'Se guardaron los módulos del local.';
+        });
+
+        return $this->respuesta($request, $mensaje);
     }
 
     /**

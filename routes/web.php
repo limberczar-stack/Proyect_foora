@@ -1,11 +1,14 @@
 <?php
 
 use App\Http\Controllers\Auth\LoginController;
+use App\Http\Controllers\Panel\AreaController;
 use App\Http\Controllers\Panel\CategoriaController;
 use App\Http\Controllers\Panel\ConfiguracionController;
+use App\Http\Controllers\Panel\CuentaController;
 use App\Http\Controllers\Panel\EstadoLocalController;
 use App\Http\Controllers\Panel\GrupoOpcionController;
 use App\Http\Controllers\Panel\InicioController;
+use App\Http\Controllers\Panel\MesaController;
 use App\Http\Controllers\Panel\MiCuentaController;
 use App\Http\Controllers\Panel\MiSuscripcionController;
 use App\Http\Controllers\Panel\PedidoController;
@@ -58,6 +61,7 @@ Route::middleware(['auth', 'panel', 'local.operativo'])->prefix('panel')->name('
             Route::get('/', [RestauranteController::class, 'show'])->name('show');
             Route::put('/', [RestauranteController::class, 'update'])->name('update');
             Route::put('notas', [RestauranteController::class, 'notas'])->name('notas');
+            Route::put('modulos', [RestauranteController::class, 'modulos'])->name('modulos');
             Route::put('plan', [SuscripcionController::class, 'plan'])->name('plan');
             Route::post('pagos', [SuscripcionController::class, 'registrarPago'])->name('pagos.store');
             Route::patch('pagos/{pago}/anular', [SuscripcionController::class, 'anularPago'])->whereNumber('pago')->name('pagos.anular');
@@ -101,6 +105,42 @@ Route::middleware(['auth', 'panel', 'local.operativo'])->prefix('panel')->name('
     Route::get('pedidos/{pedido}', [PedidoController::class, 'show'])->whereNumber('pedido')->name('pedidos.show');
     Route::patch('pedidos/{pedido}/estado', [PedidoController::class, 'estado'])->whereNumber('pedido')->name('pedidos.estado');
     Route::patch('pedidos/{pedido}/pago', [PedidoController::class, 'pago'])->whereNumber('pedido')->name('pedidos.pago');
+
+    // Mesas: 404 con el módulo apagado (en FOORA o en el local); los permisos por rol viven en MesaPolicy y AreaPolicy.
+    Route::middleware('modulo:mesas')->prefix('mesas')->name('mesas.')->group(function () {
+        Route::get('/', [MesaController::class, 'index'])->name('index');
+        Route::post('/', [MesaController::class, 'store'])->name('store');
+        Route::post('varias', [MesaController::class, 'storeVarias'])->name('varias');
+
+        Route::whereNumber('mesa')->prefix('{mesa}')->group(function () {
+            Route::put('/', [MesaController::class, 'update'])->name('update');
+            Route::patch('estado', [MesaController::class, 'estado'])->name('estado');
+            Route::patch('activa', [MesaController::class, 'activa'])->name('activa');
+            Route::patch('mover', [MesaController::class, 'mover'])->name('mover');
+        });
+
+        // Cuentas de salón: permisos en CuentaPolicy. Fuera de operación solo se cierran o anulan (EnsureLocalOperativo).
+        Route::get('plano', [CuentaController::class, 'plano'])->name('plano');
+        Route::post('cuentas', [CuentaController::class, 'store'])->name('cuentas.store');
+        Route::whereNumber('cuenta')->prefix('cuentas/{cuenta}')->name('cuentas.')->group(function () {
+            Route::get('/', [CuentaController::class, 'show'])->name('show');
+            Route::post('mesas', [CuentaController::class, 'agregarMesa'])->name('mesas.agregar');
+            Route::patch('mesas/quitar', [CuentaController::class, 'quitarMesa'])->name('mesas.quitar');
+            Route::patch('mesas/mover', [CuentaController::class, 'moverMesa'])->name('mesas.mover');
+            Route::patch('fusionar', [CuentaController::class, 'fusionar'])->name('fusionar');
+            Route::patch('mesero', [CuentaController::class, 'transferir'])->name('transferir');
+            Route::patch('cerrar', [CuentaController::class, 'cerrar'])->name('cerrar');
+            Route::patch('anular', [CuentaController::class, 'anular'])->name('anular');
+        });
+
+        Route::post('areas', [AreaController::class, 'store'])->name('areas.store');
+        Route::whereNumber('area')->prefix('areas/{area}')->name('areas.')->group(function () {
+            Route::put('/', [AreaController::class, 'update'])->name('update');
+            Route::delete('/', [AreaController::class, 'destroy'])->name('destroy');
+            Route::patch('activa', [AreaController::class, 'activa'])->name('activa');
+            Route::patch('mover', [AreaController::class, 'mover'])->name('mover');
+        });
+    });
 
     // Carta: los permisos por rol viven en ProductoPolicy, CategoriaProductoPolicy y GrupoOpcionPolicy.
     Route::prefix('carta')->name('carta.')->group(function () {

@@ -10,6 +10,7 @@
      * @var string $fecha
      * @var string $zonaHoraria
      * @var array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, activos: int, nuevos: int} $tarjetas
+     * @var array{ocupadas: int, total: int}|null $mesas  null si el local no tiene el módulo Mesas
      * @var bool $tienePedidos
      * @var \Illuminate\Database\Eloquent\Collection<int, \App\Models\Pedido> $recientes
      * @var list<array{prioridad: string, titulo: string, mensaje: ?string, hace: string, accion: array{etiqueta: string, url: string}|null}> $alertas
@@ -126,6 +127,15 @@
                 <x-stat label="Ventas de hoy" empty caption="Se suman al entregar cada pedido" data-tarjeta="ventas-hoy" />
                 <x-stat label="Pedidos activos" empty caption="Los que estás atendiendo ahora" data-tarjeta="activos" />
                 <x-stat label="Nuevos sin atender" empty caption="Los que esperan que los aceptes" data-tarjeta="nuevos" />
+            @endif
+            @if ($mesas !== null)
+                <x-stat
+                    label="Mesas ocupadas"
+                    :value="$mesas['ocupadas'].'/'.$mesas['total']"
+                    :caption="match (true) { $mesas['total'] === 0 => 'Aún sin mesas en uso', $mesas['ocupadas'] === 0 => 'Todas libres', default => ($mesas['total'] - $mesas['ocupadas']).' sin ocupar' }"
+                    :href="route('panel.mesas.index')"
+                    data-tarjeta="mesas-ocupadas"
+                />
             @endif
         </div>
     </section>

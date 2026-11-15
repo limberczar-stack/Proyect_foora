@@ -4,9 +4,11 @@ namespace App\Services;
 
 use App\Models\Alerta;
 use App\Models\HorarioAtencion;
+use App\Models\Mesa;
 use App\Models\Pedido;
 use App\Models\Producto;
 use App\Models\Restaurante;
+use App\Support\Modulos;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -34,6 +36,7 @@ class ResumenInicio
      *     fecha: string,
      *     zonaHoraria: string,
      *     tarjetas: array{pedidosHoy: int, ventasHoy: float, entregadosHoy: int, activos: int, nuevos: int},
+     *     mesas: array{ocupadas: int, total: int}|null,
      *     tienePedidos: bool,
      *     recientes: Collection<int, Pedido>,
      *     alertas: list<array{prioridad: string, titulo: string, mensaje: ?string, hace: string, accion: array{etiqueta: string, url: string}|null}>,
@@ -52,6 +55,7 @@ class ResumenInicio
             'fecha' => mb_ucfirst(Carbon::now($zona)->locale('es')->isoFormat('dddd D [de] MMMM')),
             'zonaHoraria' => $zona,
             'tarjetas' => $this->tarjetas($restaurante),
+            'mesas' => $this->mesas($restaurante),
             'tienePedidos' => $recientes->isNotEmpty(),
             'recientes' => $recientes,
             'alertas' => $this->alertas($restaurante),
@@ -97,6 +101,28 @@ class ResumenInicio
             'activos' => (int) $activos->sum(),
             'nuevos' => (int) ($activos['nuevo'] ?? 0),
         ];
+    }
+
+    /**
+     * Mesas ocupadas sobre las que están en uso (activas y de un área activa). Null si el local no tiene el módulo Mesas.
+     *
+     * @return array{ocupadas: int, total: int}|null
+     */
+    private function mesas(Restaurante $restaurante): ?array
+    {
+        if (! Modulos::activoPara('mesas', $restaurante)) {
+            return null;
+        }
+
+        $conteo = Mesa::withoutGlobalScopes()
+            ->where('mesas.restaurante_id', $restaurante->id)
+            ->where('mesas.activa', true)
+            ->whereHas('area', fn (Builder $query) => $query->withoutGlobalScopes()->where('activa', true))
+            ->selectRaw("count(*) as total, coalesce(sum(case when estado = 'ocupada' then 1 else 0 end), 0) as ocupadas")
+            ->toBase()
+            ->first();
+
+        return ['ocupadas' => (int) $conteo->ocupadas, 'total' => (int) $conteo->total];
     }
 
     /**

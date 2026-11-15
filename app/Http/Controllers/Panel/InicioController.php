@@ -5,14 +5,16 @@ namespace App\Http\Controllers\Panel;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\ResumenInicio;
+use App\Support\Modulos;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
- * El inicio según el rol: el superadmin va a su resumen, la cocina a sus pedidos, el admin y el cajero
- * ven el resumen del local, y mesero y repartidor una página que explica que aún no tienen módulos.
+ * El inicio según el rol: el superadmin va a su resumen, la cocina a sus pedidos, el mesero a su mapa de
+ * mesas si el local tiene el módulo Mesas, el admin y el cajero ven el resumen del local, y el resto
+ * (repartidor, o mesero sin Mesas) una página que explica que aún no tiene módulos.
  */
 class InicioController extends Controller
 {
@@ -30,6 +32,10 @@ class InicioController extends Controller
 
         if ($usuario->rol === 'cocina') {
             return redirect()->route('panel.pedidos.index');
+        }
+
+        if ($usuario->rol === 'mesero' && Modulos::activoPara('mesas', $usuario->restaurante)) {
+            return redirect()->route('panel.mesas.index');
         }
 
         if (! in_array($usuario->rol, self::ROLES_CON_RESUMEN, true)) {

@@ -9,8 +9,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 /**
  * Local fuera de operación (Restaurante::operativo()): el panel queda para ver.
- * Se deja solo lo que permite terminar lo que está en curso: los pedidos existentes,
- * abrir o cerrar el local, y la propia cuenta. Todo lo demás que escribe, se rechaza.
+ * Se deja solo lo que permite terminar lo que está en curso: los pedidos existentes, cerrar o
+ * anular las cuentas de salón ya abiertas (no abrir nuevas), abrir o cerrar el local, y la propia cuenta. Todo lo demás que escribe, se rechaza.
  */
 class EnsureLocalOperativo
 {
@@ -20,6 +20,8 @@ class EnsureLocalOperativo
     private const ESCRITURAS_PERMITIDAS = [
         'panel.pedidos.estado',
         'panel.pedidos.pago',
+        'panel.mesas.cuentas.cerrar',
+        'panel.mesas.cuentas.anular',
         'panel.estado-local',
         'panel.mi-cuenta.password',
         'panel.mi-cuenta.sesiones',

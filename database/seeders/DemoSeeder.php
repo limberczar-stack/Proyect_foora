@@ -5,10 +5,12 @@ namespace Database\Seeders;
 use App\Models\Alerta;
 use App\Models\Area;
 use App\Models\CategoriaProducto;
+use App\Models\Cuenta;
 use App\Models\GrupoOpcion;
 use App\Models\HorarioAtencion;
 use App\Models\Mesa;
 use App\Models\MetodoPago;
+use App\Models\OcupacionMesa;
 use App\Models\Pedido;
 use App\Models\PedidoHistorial;
 use App\Models\PedidoItem;
@@ -21,6 +23,7 @@ use App\Models\Rubro;
 use App\Models\Suscripcion;
 use App\Models\SuscripcionPago;
 use App\Models\User;
+use App\Services\GestionarCuentas;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
@@ -98,7 +101,7 @@ class DemoSeeder extends Seeder
         $adminBuenSabor = $this->usuario('admin@foora.test', 'Rosa Quispe', 'admin', $buenSabor);
         $this->usuario('cajero@foora.test', 'Miguel Torres', 'cajero', $buenSabor);
         $this->usuario('cocina@foora.test', 'Carmen Flores', 'cocina', $buenSabor);
-        $this->usuario('mesero@foora.test', 'Luis Chávez', 'mesero', $buenSabor);
+        $meseroBuenSabor = $this->usuario('mesero@foora.test', 'Luis Chávez', 'mesero', $buenSabor);
         $adminLaBahia = $this->usuario('admin@labahia.test', 'Carla Mendoza', 'admin', $laBahia);
         $adminDragon = $this->usuario('admin@chifa.test', 'Andrés Chang', 'admin', $dragonDorado);
 
@@ -119,10 +122,13 @@ class DemoSeeder extends Seeder
         $this->pedidos($laBahia, $adminLaBahia);
         $this->pedidos($dragonDorado, $adminDragon);
 
+        // El Buen Sabor tiene el módulo Mesas: 12 mesas en dos áreas, una fuera de servicio.
+        $buenSabor->forceFill(['modulos' => ['mesas']])->save();
         $this->mesas($buenSabor, [
-            'Salón principal' => ['M1' => 4, 'M2' => 2, 'M3' => 4, 'M4' => 4, 'M5' => 2, 'M6' => 6, 'M7' => 6, 'M8' => 4, 'M9' => 4, 'M10' => 8],
-            'Terraza' => ['T1' => 2, 'T2' => 2, 'T3' => 4, 'T4' => 4, 'T5' => 4, 'T6' => 2],
-        ]);
+            'Salón principal' => ['1' => 4, '2' => 2, '3' => 4, '4' => 4, '5' => 2, '6' => 6, '7' => 6, '8' => 8],
+            'Terraza' => ['T1' => 2, 'T2' => 2, 'T3' => 4, 'T4' => 4],
+        ], fueraDeServicio: ['6']);
+        $this->cuentasDeSalon($buenSabor, $meseroBuenSabor, $adminBuenSabor);
 
         $this->mesas($laBahia, [
             'Salón' => ['B1' => 4, 'B2' => 4, 'B3' => 2, 'B4' => 6],
@@ -584,24 +590,74 @@ class DemoSeeder extends Seeder
     }
 
     /**
+     * Deja exactamente estas mesas activas en el local.
+     *
      * @param  array<string, array<string, int>>  $areas  área => [código => capacidad]
+     * @param  list<string>  $fueraDeServicio  códigos que quedan fuera de servicio
      */
-    private function mesas(Restaurante $restaurante, array $areas): void
+    private function mesas(Restaurante $restaurante, array $areas, array $fueraDeServicio = []): void
     {
-        $orden = 0;
+        $ordenArea = 0;
+        $ids = [];
 
         foreach ($areas as $nombreArea => $mesas) {
             $area = Area::updateOrCreate(
                 ['restaurante_id' => $restaurante->id, 'nombre' => $nombreArea],
-                ['activa' => true, 'orden' => $orden++],
+                ['activa' => true, 'orden' => $ordenArea++],
             );
 
+            $ordenMesa = 0;
+
             foreach ($mesas as $codigo => $capacidad) {
-                Mesa::updateOrCreate(
+                $codigo = (string) $codigo;
+
+                $ids[] = Mesa::updateOrCreate(
                     ['restaurante_id' => $restaurante->id, 'codigo' => $codigo],
-                    ['area_id' => $area->id, 'capacidad' => $capacidad, 'estado' => 'disponible', 'activa' => true],
-                );
+                    [
+                        'area_id' => $area->id,
+                        'capacidad' => $capacidad,
+                        'orden' => $ordenMesa++,
+                        'estado' => in_array($codigo, $fueraDeServicio, true) ? 'fuera_servicio' : 'disponible',
+                        'activa' => true,
+                    ],
+                )->id;
             }
+        }
+
+        // Las mesas con una cuenta abierta (de una siembra anterior) siguen ocupadas.
+        Mesa::whereIn('id', OcupacionMesa::where('restaurante_id', $restaurante->id)->whereNull('salida_at')->pluck('mesa_id'))
+            ->update(['estado' => 'ocupada']);
+
+        // Sobrantes de una demo anterior: se borran si nada las usa; si no, quedan desactivadas.
+        $sobrantes = Mesa::where('restaurante_id', $restaurante->id)->whereNotIn('id', $ids);
+        (clone $sobrantes)->doesntHave('pedidos')->doesntHave('reservas')->doesntHave('ocupaciones')->delete();
+        $sobrantes->update(['activa' => false]);
+    }
+
+    /**
+     * Dos cuentas abiertas para ver el plano en uso: las mesas 4 y 5 unidas, y la T2 sola.
+     * Si el local ya tiene cuentas abiertas (siembra repetida), no crea más.
+     */
+    private function cuentasDeSalon(Restaurante $restaurante, User $mesero, User $admin): void
+    {
+        if (Cuenta::where('restaurante_id', $restaurante->id)->abiertas()->exists()) {
+            return;
+        }
+
+        $gestion = app(GestionarCuentas::class);
+        $mesa = fn (string $codigo): int => Mesa::where('restaurante_id', $restaurante->id)->where('codigo', $codigo)->where('activa', true)->value('id');
+
+        $demo = [
+            [$mesero, ['4', '5'], 6, 'Cumpleaños: traer torta al final', 50],
+            [$admin, ['T2'], 2, null, 15],
+        ];
+
+        foreach ($demo as [$quien, $codigos, $comensales, $nota, $haceMinutos]) {
+            $cuenta = $gestion->abrir($quien, array_map($mesa, $codigos), $comensales, $nota);
+            $desde = now()->subMinutes($haceMinutos);
+
+            $cuenta->forceFill(['abierta_at' => $desde])->save();
+            $cuenta->ocupaciones()->update(['ingreso_at' => $desde]);
         }
     }
 }

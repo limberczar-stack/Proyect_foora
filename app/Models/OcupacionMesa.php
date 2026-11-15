@@ -6,6 +6,12 @@ use App\Models\Concerns\BelongsToRestaurante;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * Una mesa dentro de una cuenta: salida_at nulo significa que la mesa sigue ocupada, y la base
+ * garantiza una sola ocupación abierta por mesa (índice uq_ocu_mesa_abierta sobre la columna
+ * generada mesa_abierta_id, que nunca se escribe). personas, mesero_id y consumo_total no se
+ * usan con cuentas: esos datos viven en la cuenta.
+ */
 class OcupacionMesa extends Model
 {
     use BelongsToRestaurante;
@@ -15,6 +21,7 @@ class OcupacionMesa extends Model
     protected $fillable = [
         'restaurante_id',
         'mesa_id',
+        'cuenta_id',
         'reserva_id',
         'pedido_id',
         'mesero_id',
@@ -43,6 +50,14 @@ class OcupacionMesa extends Model
     public function mesa(): BelongsTo
     {
         return $this->belongsTo(Mesa::class);
+    }
+
+    /**
+     * @return BelongsTo<Cuenta, $this>
+     */
+    public function cuenta(): BelongsTo
+    {
+        return $this->belongsTo(Cuenta::class);
     }
 
     /**

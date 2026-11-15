@@ -14,12 +14,13 @@ return [
     /*
      * Módulos del panel que aún no están construidos. Actívalos aquí cuando existan: aparecen en el
      * menú solo si además existe su ruta (App\Support\Modulos), así nunca hay un enlace sin destino.
+     * Los de Modulos::POR_LOCAL (mesas) además los enciende el superadmin en cada local.
      */
 
     'modulos' => [
         'alertas' => false,
         'reservas' => false,
-        'mesas' => false,
+        'mesas' => true,
         'promociones' => false,
         'actividad' => false,
         'ayuda' => false,

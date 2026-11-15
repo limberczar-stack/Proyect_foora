@@ -16,11 +16,11 @@
      *
      * @var array{nombre: string, rol: string, iniciales: string}|null $panelUsuario
      * @var array{nombre: string, ciudad: string, plan: ?string, abierto: bool, iniciales: string, logo: ?string, puedeCambiarEstado: bool, puedeConfigurar: bool, aviso: ?array{tono: string, titulo: string, mensaje: string}, contacto: array{whatsapp: ?string, email: ?string}}|null $panelRestaurante
-     * @var array{pedidos: bool, carta: bool}|null $panelPermisos
+     * @var array{pedidos: bool, carta: bool, mesas: bool}|null $panelPermisos
      */
     $panelUsuario ??= ['nombre' => 'Invitado', 'rol' => '', 'iniciales' => '?'];
     $panelRestaurante ??= null;
-    $panelPermisos ??= ['pedidos' => false, 'carta' => false];
+    $panelPermisos ??= ['pedidos' => false, 'carta' => false, 'mesas' => false];
     $navActivo ??= 'inicio';
     $navPedidosNuevos ??= 0;
     $navAlertas ??= null;
@@ -43,7 +43,7 @@
                 ['clave' => 'pedidos', 'label' => 'Pedidos', 'icon' => 'receipt', 'ruta' => 'panel.pedidos.index', 'visible' => $panelPermisos['pedidos'], 'count' => $navPedidosNuevos, 'countLabel' => 'pedidos nuevos', 'vivo' => true],
                 ['clave' => 'alertas', 'label' => 'Alertas', 'icon' => 'bell', 'ruta' => \App\Support\Modulos::RUTAS['alertas'], 'visible' => $navAlertas !== null, 'count' => $navAlertas ?? 0, 'countLabel' => 'alertas sin resolver'],
                 ['clave' => 'reservas', 'label' => 'Reservas', 'icon' => 'calendar', 'ruta' => \App\Support\Modulos::RUTAS['reservas'], 'visible' => $moduloVisible('reservas')],
-                ['clave' => 'mesas', 'label' => 'Mesas', 'icon' => 'table', 'ruta' => \App\Support\Modulos::RUTAS['mesas'], 'visible' => $moduloVisible('mesas')],
+                ['clave' => 'mesas', 'label' => 'Mesas', 'icon' => 'table', 'ruta' => \App\Support\Modulos::RUTAS['mesas'], 'visible' => $panelPermisos['mesas'] ?? false],
             ]],
             ['grupo' => 'Gestión', 'items' => [
                 ['clave' => 'carta', 'label' => 'Carta', 'icon' => 'book', 'ruta' => 'panel.carta.productos.index', 'visible' => $panelPermisos['carta']],

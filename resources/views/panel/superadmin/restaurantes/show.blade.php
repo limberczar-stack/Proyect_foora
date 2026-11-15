@@ -17,6 +17,7 @@
      * @var \Illuminate\Support\Collection<int, \App\Models\Rubro> $rubros
      * @var \Illuminate\Support\Collection<int, \App\Models\Plan> $planes
      * @var list<string> $metodos
+     * @var array<string, array{nombre: string, descripcion: string}> $modulos
      */
     $navActivo = 'superadmin-restaurantes';
     $soles = fn ($monto): string => "S/\u{00A0}".number_format((float) $monto, 2);
@@ -238,6 +239,22 @@
                     @include('panel.superadmin._enviar', ['texto' => 'Guardar datos'])
                 </form>
             </x-card>
+
+            @if ($modulos !== [])
+                <x-card title="Módulos" subtitle="Se encienden local por local. Apagar un módulo lo oculta, pero no borra sus datos.">
+                    <form method="POST" action="{{ $url('modulos') }}" data-ajax-form data-recargar novalidate class="flex flex-col gap-4">
+                        @csrf
+                        @method('PUT')
+                        @include('panel.configuracion._resumen', ['claves' => []])
+                        <div class="flex flex-col divide-y divide-rule">
+                            @foreach ($modulos as $clave => $modulo)
+                                <x-toggle name="modulos[{{ $clave }}]" :id="'modulo-'.$clave" :label="$modulo['nombre']" :description="$modulo['descripcion']" :checked="$restaurante->tieneModulo($clave)" />
+                            @endforeach
+                        </div>
+                        @include('panel.superadmin._enviar', ['texto' => 'Guardar módulos'])
+                    </form>
+                </x-card>
+            @endif
 
             <x-card title="Notas internas" subtitle="Solo las ve el equipo de FOORA, nunca el local.">
                 <form method="POST" action="{{ $url('notas') }}" data-ajax-form data-recargar novalidate class="flex flex-col gap-4">

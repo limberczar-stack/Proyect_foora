@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Middleware\EnsureLocalOperativo;
+use App\Http\Middleware\EnsureModuloActivo;
 use App\Http\Middleware\EnsurePanelAccess;
 use App\Http\Middleware\EnsureUserHasRole;
 use Illuminate\Foundation\Application;
@@ -19,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'panel' => EnsurePanelAccess::class,
             'local.operativo' => EnsureLocalOperativo::class,
             'rol' => EnsureUserHasRole::class,
+            'modulo' => EnsureModuloActivo::class,
         ]);
 
         $middleware->redirectGuestsTo(fn (): string => route('login'));

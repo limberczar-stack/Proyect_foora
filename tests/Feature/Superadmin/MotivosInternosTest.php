@@ -48,7 +48,8 @@ class MotivosInternosTest extends TestCase
 
         $plan = Plan::create(['nombre' => 'Pro', 'precio_mensual' => 79]);
         $this->superadmin = User::factory()->superadmin()->create();
-        $this->restaurante = Restaurante::factory()->create(['plan_id' => $plan->id]);
+        // Con Mesas encendido: sus pantallas se revisan de verdad, no con un 404.
+        $this->restaurante = Restaurante::factory()->conModulos('mesas')->create(['plan_id' => $plan->id]);
         $this->admin = User::factory()->admin($this->restaurante)->create();
         $this->cajero = User::factory()->cajero($this->restaurante)->create();
 
@@ -117,6 +118,7 @@ class MotivosInternosTest extends TestCase
         $rutas = $this->rutasDelLocalSinParametros();
         $this->assertContains('panel.suscripcion', $rutas);
         $this->assertContains('panel.pedidos.novedades', $rutas);
+        $this->assertContains('panel.mesas.index', $rutas);
 
         foreach ([$this->admin, $this->cajero] as $usuario) {
             $this->actingAs($usuario->fresh());
@@ -128,6 +130,7 @@ class MotivosInternosTest extends TestCase
             }
 
             $this->assertSinMotivos($this->get(route('panel.pedidos.show', $pedido)), 'panel.pedidos.show');
+            $this->get(route('panel.mesas.index'))->assertOk();
         }
     }
 

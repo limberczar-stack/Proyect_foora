@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use App\Models\Alerta;
+use App\Models\Area;
+use App\Models\Cuenta;
 use App\Models\Mesa;
 use App\Models\Pedido;
 use App\Models\Producto;
@@ -47,6 +49,8 @@ class AppServiceProvider extends ServiceProvider
             'reserva' => Reserva::class,
             'producto' => Producto::class,
             'mesa' => Mesa::class,
+            'area' => Area::class,
+            'cuenta' => Cuenta::class,
             'promocion' => Promocion::class,
             'restaurante' => Restaurante::class,
             'user' => User::class,
@@ -114,7 +118,8 @@ class AppServiceProvider extends ServiceProvider
             // El menú solo ofrece lo que el rol puede abrir.
             $puedeVerPedidos = $restaurante !== null && $user->can('viewAny', Pedido::class);
             $puedeVerCarta = $restaurante !== null && $user->can('viewAny', Producto::class);
-            $view->with('panelPermisos', ['pedidos' => $puedeVerPedidos, 'carta' => $puedeVerCarta]);
+            $puedeVerMesas = $restaurante !== null && $user->can('viewAny', Mesa::class) && Modulos::activoPara('mesas', $restaurante);
+            $view->with('panelPermisos', ['pedidos' => $puedeVerPedidos, 'carta' => $puedeVerCarta, 'mesas' => $puedeVerMesas]);
 
             // Badge del menú: pedidos que esperan ser aceptados. La cocina no los ve hasta que se aceptan.
             $view->with('navPedidosNuevos', $puedeVerPedidos && $user->rol !== 'cocina' ? Pedido::query()

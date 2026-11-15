@@ -35,6 +35,14 @@ class RestauranteFactory extends Factory
         return $this->state(fn (array $attributes): array => ['estado_local' => 'cerrado']);
     }
 
+    /**
+     * Con módulos encendidos por el superadmin (p. ej. 'mesas').
+     */
+    public function conModulos(string ...$modulos): static
+    {
+        return $this->state(fn (array $attributes): array => ['modulos' => $modulos]);
+    }
+
     public function inactivo(): static
     {
         return $this->state(fn (array $attributes): array => ['activo' => false]);

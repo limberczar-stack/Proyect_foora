@@ -97,10 +97,21 @@ class Restaurante extends Model
             'tolerancia_reserva_min' => 'integer',
             'umbral_ocupacion_alta' => 'integer',
             'config_notificaciones' => 'array',
+            'modulos' => 'array',
             'calificacion_promedio' => 'decimal:1',
             'total_resenas' => 'integer',
             'activo' => 'boolean',
         ];
+    }
+
+    /**
+     * El equipo de FOORA encendió este módulo para el local. No basta para mostrarlo:
+     * usa Modulos::activoPara(), que además revisa foora.modulos y que exista su ruta.
+     * modulos no está en $fillable: solo lo cambia el superadmin.
+     */
+    public function tieneModulo(string $modulo): bool
+    {
+        return in_array($modulo, $this->modulos ?? [], true);
     }
 
     public function estaAbierto(): bool

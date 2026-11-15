@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Panel;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Configuracion\UsuarioRequest;
 use App\Models\User;
+use App\Services\GestionarCuentas;
 use App\Services\GestionarUsuarios;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -65,7 +66,7 @@ class UsuarioController extends Controller
         return $this->responder($request, "Se guardaron los cambios de {$usuario->name}.", $usuario);
     }
 
-    public function estado(Request $request, string $usuario): JsonResponse|RedirectResponse
+    public function estado(Request $request, string $usuario, GestionarCuentas $cuentas): JsonResponse|RedirectResponse
     {
         $objetivo = $this->objetivo($request, $usuario);
         $activo = $request->validate(['activo' => ['required', 'boolean']], [
@@ -75,9 +76,17 @@ class UsuarioController extends Controller
 
         $objetivo = $this->gestion->cambiarActivo($request->user(), $objetivo, filter_var($activo, FILTER_VALIDATE_BOOLEAN));
 
+        // Desactivar no se bloquea por tener cuentas de salón abiertas: se avisa para que el admin las transfiera.
+        $abiertas = $objetivo->activo ? 0 : $cuentas->abiertasDe($objetivo);
+        $aviso = match (true) {
+            $abiertas === 0 => null,
+            $abiertas === 1 => "{$objetivo->name} tiene 1 cuenta de salón abierta a su nombre. Transfiérela a otra persona desde Mesas.",
+            default => "{$objetivo->name} tiene {$abiertas} cuentas de salón abiertas a su nombre. Transfiérelas a otra persona desde Mesas.",
+        };
+
         return $this->responder($request, $objetivo->activo
             ? "La cuenta de {$objetivo->name} está activa."
-            : "La cuenta de {$objetivo->name} quedó desactivada y se cerraron sus sesiones.", $objetivo);
+            : "La cuenta de {$objetivo->name} quedó desactivada y se cerraron sus sesiones.".($aviso ? " {$aviso}" : ''), $objetivo, $aviso, $abiertas);
     }
 
     public function restablecer(Request $request, string $usuario): JsonResponse
@@ -115,10 +124,14 @@ class UsuarioController extends Controller
             ->header('Pragma', 'no-cache');
     }
 
-    private function responder(Request $request, string $mensaje, User $usuario): JsonResponse|RedirectResponse
+    private function responder(Request $request, string $mensaje, User $usuario, ?string $aviso = null, int $cuentasAbiertas = 0): JsonResponse|RedirectResponse
     {
         if ($request->expectsJson()) {
-            return response()->json(['mensaje' => $mensaje, 'usuario' => $this->paraJson($usuario)]);
+            return response()->json([
+                'mensaje' => $mensaje,
+                'usuario' => $this->paraJson($usuario),
+                ...($aviso === null ? [] : ['aviso' => $aviso, 'cuentas_abiertas' => $cuentasAbiertas]),
+            ]);
         }
 
         return redirect()->route('panel.configuracion.usuarios')->with('status', $mensaje);

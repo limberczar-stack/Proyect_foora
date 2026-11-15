@@ -8,3 +8,5 @@ import './pedidos';
 import './estado-local';
 import './configuracion';
 import './superadmin';
+import './mesas';
+import './salon';
