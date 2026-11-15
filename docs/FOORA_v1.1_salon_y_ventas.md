@@ -20,7 +20,9 @@ Si FOORA se presenta como reemplazo del sistema de ventas, compite contra algo q
 
 Consecuencias de diseño:
 
-1. **Módulos por restaurante, no globales.** Hoy `config/foora.php` enciende módulos para toda la plataforma. Se necesita un interruptor por local (columna JSON `restaurantes.modulos` con `salon`, `caja`, `comprobantes`), que el superadmin controla y que puede atarse al plan.
+1. **Módulos por restaurante, no globales.** `config/foora.php` enciende un módulo para toda la plataforma, y además cada local tiene su interruptor: la columna JSON `restaurantes.modulos`, que controla el superadmin y que podrá atarse al plan.
+   - **Construido:** la clave real es **`mesas`**, y cubre todo el nivel 2 (áreas, mesas, cuentas, rondas y precuenta). No existe una clave `salon`.
+   - **Propuesta pendiente:** `caja` y `comprobantes`, para el nivel 3. Se crearán con esos módulos.
 2. **El Salón no depende de la Caja.** Una cuenta de mesa se puede cerrar con "Cobrado en otro sistema" sin generar venta ni comprobante en FOORA.
 3. **Exportación diaria.** Reporte de ventas del día en CSV/Excel (por producto y por método de pago), para que el local que cobra en otro sistema pueda cuadrar.
 4. **Encaje con los planes** (sugerencia a validar): Básico = nivel 1, Pro = niveles 1 y 2, Premium = los tres.
@@ -343,18 +345,18 @@ Lo que mostraron los controles negativos:
 
 Un módulo por sesión de Claude Code, con plan aprobado antes de escribir código, como en v1.
 
-| Fase | Contenido | Entregable que se puede mostrar al restaurante |
-|---|---|---|
-| **A. Mesas** | CRUD de áreas y mesas, límite `max_mesas`, módulos por restaurante | El admin dibuja su salón |
-| **B. Salón** | Cuentas, unir mesas, tomar pedido, rondas, cocina, precuenta, cierre externo | El mesero trabaja con el celular. **Ya es vendible sin tocar su sistema de ventas** |
-| **C. Caja** | Sesiones de caja, ventas, pago mixto, descuentos, anulaciones, cierre con arqueo | Cuadre de caja diario |
-| **D. Comprobantes** | Series, boleta, factura, nota de venta, impresión, pestaña Facturación | Ticket impreso |
-| **E. Reportes** | Ventas por día, método, mesero y producto; exportación | Lo que el dueño mira cada noche |
-| **F. SUNAT** | Integración por API | Reemplazo completo del otro sistema |
+| Fase | Contenido | Entregable que se puede mostrar al restaurante | Estado |
+|---|---|---|---|
+| **A. Mesas** | CRUD de áreas y mesas, límite `max_mesas`, módulos por restaurante | El admin dibuja su salón | **Hecha** (11/11/2026) |
+| **B. Salón** | **B1:** cuentas, unir mesas, mover, fusionar, transferir, cierre externo y anulación. **B2:** tomar pedido, rondas, cocina, servir, anular líneas, precuenta | El mesero trabaja con el celular. **Ya es vendible sin tocar su sistema de ventas** | **Hecha**: B1 y B2 (15/11/2026) |
+| **C. Caja** | Sesiones de caja, ventas, pago mixto, descuentos, anulaciones, cierre con arqueo | Cuadre de caja diario | Pendiente |
+| **D. Comprobantes** | Series, boleta, factura, nota de venta, impresión, pestaña Facturación | Ticket impreso | Pendiente |
+| **E. Reportes** | Ventas por día, método, mesero y producto; exportación | Lo que el dueño mira cada noche | Pendiente |
+| **F. SUNAT** | Integración por API | Reemplazo completo del otro sistema | Pendiente |
 
-Hacer un piloto real al terminar la fase B, antes de invertir en C y D.
+Hacer un piloto real al terminar la fase B, antes de invertir en C y D. Con A y B hechas, el siguiente paso es ese piloto.
 
-**Prompt sugerido para la fase B:**
+**Prompt sugerido para la fase B** (ya usado para B1 y B2; queda como referencia del formato):
 
 ```
 Contexto: lee CLAUDE.md, docs/FOORA_v1_documentacion.md, docs/FOORA_v1.1_salon_y_ventas.md y docs/INVENTARIO_TECNICO.md.
@@ -382,7 +384,7 @@ Reglas de trabajo:
 1. **Modo de comprobantes** para el piloto: A, B o C (sección 6.1). Consultar al contador.
 2. **¿Qué sistema de ventas usan** los locales del piloto y qué les falta? Define si la fase C vale la pena ahora.
 3. **Planes:** ¿Salón entra en Pro y Caja en Premium, o se suben los precios?
-4. **Mesero:** ¿ve todas las cuentas o solo las suyas por defecto?
-5. **Ventas de hoy:** ¿desde `ventas` o desde pedidos entregados cuando el local no usa Caja?
+4. **Mesero.** **Resuelta:** ve y opera todas las cuentas del local. Solo anular está limitado a sus propias cuentas, y únicamente si no tienen pedidos vivos. El ajuste "solo las suyas" no se construyó.
+5. **Ventas de hoy.** **Resuelta:** sin Caja, una ronda de salón cuenta cuando su cuenta se **cierra** hoy, no al servirse; las de cuentas anuladas no cuentan. Delivery y recojo siguen contando al entregarse. Cuando exista la Caja habrá que decidir si la cifra pasa a salir de `ventas`.
 6. **Cajero anula ventas** o solo el admin.
-7. **Varias cocinas** (barra y cocina separadas): si algún local del piloto lo necesita, hay que añadir "estación" por categoría antes de la fase B.
+7. **Varias cocinas** (barra y cocina separadas). Hoy todas las rondas llegan a una sola pantalla de cocina. Si un local del piloto tiene barra y cocina separadas, "estación por categoría" se agrega como mejora posterior al salón, antes de la Caja. Sigue abierta.
